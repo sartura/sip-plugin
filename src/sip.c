@@ -2,203 +2,203 @@
 #include <unistd.h>
 #include <uci.h>
 #include <sys/stat.h>
-#include <libubox/list.h>
 
 #include <sysrepo.h>
 #include <sysrepo/plugins.h>
 
 #include "common.h"
 #include "sip.h"
-
-#define XPATH_MAX_LEN 100
+#include "parse.h"
 
 /* name of the uci config file. */
-//static const char *config_file = "voice_client";
-static const char *yang_model = "ietf-interfaces";
+static const char *config_file = "voice_client";
+static const char *yang_model = "terastream-sip";
 
-static int rpc_start(const char *xpath, const sr_val_t *input, const size_t input_cnt,
-              sr_val_t **output, size_t *output_cnt, void *private_ctx)
+static int parse_change(sr_session_ctx_t *session, const char *module_name, ctx_t *ctx, sr_notif_event_t event)
 {
-    pid_t pid=fork();
-    if (pid==0) {
-        execl("/etc/init.d/asterisk", "asterisk", "start", (char *) NULL);
-        exit(127);
-    } else {
-        waitpid(pid, 0, 0);
-    }
+	sr_change_iter_t *it = NULL;
+	int rc = SR_ERR_OK;
+	sr_change_oper_t oper;
+	sr_val_t *old_value = NULL;
+	sr_val_t *new_value = NULL;
+	char xpath[XPATH_MAX_LEN] = {
+		0,
+	};
 
-    return SR_ERR_OK;
+	snprintf(xpath, XPATH_MAX_LEN, "/%s:*", module_name);
+
+	rc = sr_get_changes_iter(session, xpath, &it);
+	if (SR_ERR_OK != rc) {
+		printf("Get changes iter failed for xpath %s", xpath);
+		goto error;
+	}
+
+	while (SR_ERR_OK == sr_get_change_next(session, it, &oper, &old_value, &new_value)) {
+		rc = sysrepo_to_uci(ctx, oper, old_value, new_value, event);
+		sr_free_val(old_value);
+		sr_free_val(new_value);
+		CHECK_RET(rc, error, "failed to add operation: %s", sr_strerror(rc));
+	}
+
+	DBG_MSG("restart voice_client");
+	pid_t pid = fork();
+	if (0 == pid) {
+		if (-1 == system("/etc/init.d/voice_client reload > /dev/null")) {
+			ERR_MSG("failed to reload voice_client");
+		};
+
+		sr_val_t *value = NULL;
+		rc = sr_get_item(session, "/terastream-sip:asterisk/enabled", &value);
+		if (SR_ERR_OK != rc) {
+			ERR("Could nog get /terastream-sip:asterisk/enabled, error: %s", sr_strerror(rc));
+			exit(127);
+		}
+
+		if (true == value->data.bool_val) {
+			//TODO get asterisk state
+			if (-1 == system("/etc/init.d/asterisk restart > /dev/null")) {
+				ERR_MSG("failed to restart voice_client");
+			};
+			sleep(1);
+			//TODO asterisk works only after second restart
+			if (-1 == system("/etc/init.d/asterisk restart > /dev/null")) {
+				ERR_MSG("failed to restart voice_client");
+			};
+		}
+		if (NULL != value) {
+			sr_free_val(value);
+		}
+		exit(127);
+	} else {
+		waitpid(pid, 0, 0);
+	}
+
+error:
+	if (NULL != it) {
+		sr_free_change_iter(it);
+	}
+	return rc;
 }
 
-static int rpc_stop(const char *xpath, const sr_val_t *input, const size_t input_cnt,
-                    sr_val_t **output, size_t *output_cnt, void *private_ctx)
+static int module_change_cb(sr_session_ctx_t *session, const char *module_name, sr_notif_event_t event, void *private_ctx)
 {
-    pid_t pid=fork();
-    if (pid==0) {
-        execl("/etc/init.d/asterisk", "asterisk", "stop", (char *) NULL);
-        exit(127);
-    } else {
-        waitpid(pid, 0, 0);
-    }
+	int rc = SR_ERR_OK;
+	ctx_t *ctx = private_ctx;
+	INF("%s configuration has changed.", yang_model);
 
-    return SR_ERR_OK;
-}
-
-static int rpc_restart(const char *xpath, const sr_val_t *input, const size_t input_cnt,
-                       sr_val_t **output, size_t *output_cnt, void *private_ctx)
-{
-    pid_t pid=fork();
-    if (pid==0) {
-        execl("/etc/init.d/asterisk", "asterisk", "restart", (char *) NULL);
-        exit(127);
-    } else {
-        waitpid(pid, 0, 0);
-    }
-
-    return SR_ERR_OK;
-}
-
-static int rpc_reload(const char *xpath, const sr_val_t *input, const size_t input_cnt,
-                      sr_val_t **output, size_t *output_cnt, void *private_ctx)
-{
-    pid_t pid=fork();
-    if (pid==0) {
-        execl("/etc/init.d/asterisk", "asterisk", "reload", (char *) NULL);
-        exit(127);
-    } else {
-        waitpid(pid, 0, 0);
-    }
-
-    return SR_ERR_OK;
-}
-
-static int rpc_disable(const char *xpath, const sr_val_t *input, const size_t input_cnt,
-                       sr_val_t **output, size_t *output_cnt, void *private_ctx)
-{
-    pid_t pid=fork();
-    if (pid==0) {
-        execl("/etc/init.d/asterisk", "asterisk", "disable", (char *) NULL);
-        exit(127);
-    } else {
-        waitpid(pid, 0, 0);
-    }
-
-    return SR_ERR_OK;
-}
-
-static int rpc_enable(const char *xpath, const sr_val_t *input, const size_t input_cnt,
-                      sr_val_t **output, size_t *output_cnt, void *private_ctx)
-{
-    pid_t pid = fork();
-    if (pid == 0) {
-        execl("/etc/init.d/asterisk", "asterisk", "enable", (char *) NULL);
-        exit(127);
-    } else {
-        waitpid(pid, 0, 0);
-    }
-
-    return SR_ERR_OK;
-}
-
-//static int
-//module_change_cb(sr_session_ctx_t *session, const char *module_name, sr_notif_event_t event, void *private_ctx) {
-//	int rc = SR_ERR_OK;
-//	ctx_t *ctx = private_ctx;
-//	INF("%s configuration has changed.", yang_model);
-//
-//	ctx->sess = session;
-//
-//	if (SR_EV_APPLY == event) {
-//		/* copy running datastore to startup */
-//
-//		rc = sr_copy_config(ctx->startup_sess, module_name, SR_DS_RUNNING, SR_DS_STARTUP);
-//		if (SR_ERR_OK != rc) {
-//			WRN_MSG("Failed to copy running datastore to startup");
-//			/* TODO handle this error */
-//			return rc;
-//		}
-//		return SR_ERR_OK;
-//	}
-//
-//	//rc = parse_config(session, module_name, ctx, event);
-//	CHECK_RET(rc, error, "failed to apply sysrepo changes to snabb: %s", sr_strerror(rc));
-//
-//error:
-//	return rc;
-//}
-
-static int
-module_change_cb(sr_session_ctx_t *session, const char *module_name, sr_notif_event_t event, void *private_ctx)
-{
-    int rc = SR_ERR_OK;
-    ctx_t *ctx = private_ctx;
-
-    return rc;
-}
-
-int
-sr_plugin_init_cb(sr_session_ctx_t *session, void **private_ctx)
-{
-    sr_subscription_ctx_t *subscription = NULL;
-    int rc = SR_ERR_OK;
-
-    /* INF("sr_plugin_init_cb for sysrepo-plugin-dt-network"); */
-
-    ctx_t *ctx = calloc(1, sizeof(*ctx));
-	ctx->sub = subscription;
 	ctx->sess = session;
-    *private_ctx = ctx;
 
-    /* Allocate UCI context for uci files. */
-    ctx->uctx = uci_alloc_context();
-    if (!ctx->uctx) {
-        fprintf(stderr, "Can't allocate uci\n");
-        goto error;
-    }
-INF_MSG("TEST");
-    rc = sr_module_change_subscribe(session, yang_model, module_change_cb, *private_ctx,
-                                    0, SR_SUBSCR_DEFAULT, &subscription);
-    CHECK_RET(rc, error, "initialization error: %s", sr_strerror(rc));
-INF_MSG("TEST");
+	if (SR_EV_APPLY == event) {
+		/* copy running datastore to startup */
 
-	/* subscribe for handling RPC */
-/*
-    rc = sr_rpc_subscribe(session, "/sip:start", rpc_start, (void *)session, SR_SUBSCR_DEFAULT, &ctx->sub);
-    CHECK_RET(rc, error, "rpc start initialization error: %s", sr_strerror(rc));
-    rc = sr_rpc_subscribe(session, "/sip:stop", rpc_stop, (void *)session, SR_SUBSCR_DEFAULT, &subscription);
-    CHECK_RET(rc, error, "rpc stop initialization error: %s", sr_strerror(rc));
-    rc = sr_rpc_subscribe(session, "/sip:restart", rpc_restart, (void *)session, SR_SUBSCR_DEFAULT, &subscription);
-    CHECK_RET(rc, error, "rpc restart initialization error: %s", sr_strerror(rc));
-    rc = sr_rpc_subscribe(session, "/sip:reload", rpc_reload, (void *)session, SR_SUBSCR_DEFAULT, &subscription);
-    CHECK_RET(rc, error, "rpc reload initialization error: %s", sr_strerror(rc));
-    rc = sr_rpc_subscribe(session, "/sip:disable", rpc_disable, (void *)session, SR_SUBSCR_DEFAULT, &subscription);
-    CHECK_RET(rc, error, "rpc disable initialization error: %s", sr_strerror(rc));
-    rc = sr_rpc_subscribe(session, "/sip:enable", rpc_enable, (void *)session, SR_SUBSCR_DEFAULT, &subscription);
-    CHECK_RET(rc, error, "rpc enable initialization error: %s", sr_strerror(rc));
+		rc = sr_copy_config(ctx->startup_sess, module_name, SR_DS_RUNNING, SR_DS_STARTUP);
+		if (SR_ERR_OK != rc) {
+			WRN_MSG("Failed to copy running datastore to startup");
+			/* TODO handle this error */
+			return rc;
+		}
+		return SR_ERR_OK;
+	}
 
-*/
-    SRP_LOG_DBG_MSG("Plugin initialized successfully");
+	rc = parse_change(session, module_name, ctx, event);
+	CHECK_RET(rc, error, "failed to apply sysrepo changes to snabb: %s", sr_strerror(rc));
 
-    return SR_ERR_OK;
+error:
+	return rc;
+}
 
-  error:
-    SRP_LOG_ERR("Plugin initialization failed: %s", sr_strerror(rc));
-    sr_unsubscribe(session, subscription);
-    free(ctx);
+static int state_data_cb(const char *xpath, sr_val_t **values, size_t *values_cnt, void *private_ctx)
+{
+    int rc = SR_ERR_OK;
+	ctx_t *ctx = private_ctx;
+
+	rc = fill_state_data(ctx, (char *) xpath, values, values_cnt);
+	if (SR_ERR_OK != rc) {
+		DBG("failed to load state data: %s", sr_strerror(rc));
+		rc = SR_ERR_OK;
+	}
+	CHECK_RET(rc, error, "failed to load state data: %s", sr_strerror(rc));
+
+error:
     return rc;
 }
 
-void
-sr_plugin_cleanup_cb(sr_session_ctx_t *session, void *private_ctx)
+int sr_plugin_init_cb(sr_session_ctx_t *session, void **private_ctx)
 {
-    INF("Plugin cleanup called, private_ctx is %s available.", private_ctx ? "" : "not");
-    if (!private_ctx) return;
+	int rc = SR_ERR_OK;
 
-    ctx_t *ctx = private_ctx;
-    sr_unsubscribe(session, ctx->sub);
-    free(ctx);
+	/* INF("sr_plugin_init_cb for sysrepo-plugin-dt-network"); */
 
-    SRP_LOG_DBG_MSG("Plugin cleaned-up successfully");
+	ctx_t *ctx = calloc(1, sizeof(*ctx));
+	ctx->sub = NULL;
+	ctx->sess = session;
+	ctx->startup_conn = NULL;
+	ctx->startup_sess = NULL;
+	ctx->yang_model = yang_model;
+	ctx->config_file = config_file;
+	*private_ctx = ctx;
+
+	/* Allocate UCI context for uci files. */
+	ctx->uctx = uci_alloc_context();
+	if (NULL == ctx->uctx) {
+		rc = SR_ERR_NOMEM;
+	}
+	CHECK_RET(rc, error, "Can't allocate uci context: %s", sr_strerror(rc));
+
+	/* load the startup datastore */
+	INF_MSG("load sysrepo startup datastore");
+	rc = load_startup_datastore(ctx);
+	CHECK_RET(rc, error, "failed to load startup datastore: %s", sr_strerror(rc));
+
+	/* sync sysrepo datastore and uci configuration file */
+	rc = sync_datastores(ctx);
+	CHECK_RET(rc, error, "failed to sync sysrepo datastore and cui configuration file: %s", sr_strerror(rc));
+
+	rc = sr_module_change_subscribe(ctx->sess, yang_model, module_change_cb, *private_ctx, 0, SR_SUBSCR_DEFAULT, &ctx->sub);
+	CHECK_RET(rc, error, "initialization error: %s", sr_strerror(rc));
+
+	rc = sr_dp_get_items_subscribe(ctx->sess, "/terastream-sip:sip-state", state_data_cb, ctx, SR_SUBSCR_CTX_REUSE, &ctx->sub);
+	CHECK_RET(rc, error, "failed sr_dp_get_items_subscribe: %s", sr_strerror(rc));
+
+	INF_MSG("Plugin initialized successfully");
+
+	return SR_ERR_OK;
+
+error:
+	ERR("Plugin initialization failed: %s", sr_strerror(rc));
+	if (NULL != ctx->sub) {
+		sr_unsubscribe(ctx->sess, ctx->sub);
+		ctx->sub = NULL;
+	}
+	return rc;
+}
+
+void sr_plugin_cleanup_cb(sr_session_ctx_t *session, void *private_ctx)
+{
+	INF("Plugin cleanup called, private_ctx is %s available.", private_ctx ? "" : "not");
+	if (!private_ctx)
+		return;
+
+	ctx_t *ctx = private_ctx;
+	if (NULL == ctx) {
+		return;
+	}
+	/* clean startup datastore */
+	if (NULL != ctx->startup_sess) {
+		sr_session_stop(ctx->startup_sess);
+	}
+	if (NULL != ctx->startup_conn) {
+		sr_disconnect(ctx->startup_conn);
+	}
+	if (NULL != ctx->sub) {
+		sr_unsubscribe(session, ctx->sub);
+	}
+	if (ctx->uctx) {
+		uci_free_context(ctx->uctx);
+	}
+	free(ctx);
+
+	DBG_MSG("Plugin cleaned-up successfully");
 }
 
 #ifndef PLUGIN
@@ -207,14 +207,14 @@ sr_plugin_cleanup_cb(sr_session_ctx_t *session, void *private_ctx)
 
 volatile int exit_application = 0;
 
-static void
-sigint_handler(__attribute__((unused)) int signum) {
+static void sigint_handler(__attribute__((unused)) int signum)
+{
 	INF_MSG("Sigint called, exiting...");
 	exit_application = 1;
 }
 
-int
-main() {
+int main()
+{
 	INF_MSG("Plugin application mode initialized");
 	sr_conn_ctx_t *connection = NULL;
 	sr_session_ctx_t *session = NULL;
@@ -236,11 +236,11 @@ main() {
 	signal(SIGINT, sigint_handler);
 	signal(SIGPIPE, SIG_IGN);
 	while (!exit_application) {
-		sleep(1);  /* or do some more useful work... */
+		sleep(1); /* or do some more useful work... */
 	}
 
-	sr_plugin_cleanup_cb(session, private_ctx);
 cleanup:
+	sr_plugin_cleanup_cb(session, private_ctx);
 	if (NULL != session) {
 		sr_session_stop(session);
 	}

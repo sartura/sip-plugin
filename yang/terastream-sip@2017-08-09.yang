@@ -1,0 +1,152 @@
+module terastream-sip {
+
+	namespace "urn:opencpe:ts-sip";
+
+	prefix "ts-sip";
+
+	organization
+	    "Deutsche Telekom AG";
+
+	contact
+	    "Landgrabenweg 151
+	    53227 Bonn, Germany";
+
+	description
+	    "This module defines SIP used in the TeraStream home gateway project.";
+
+	revision "2017-08-09" {
+	    description
+	        "Version 0.2.0";
+	}
+
+	container asterisk {
+		description
+		 "Asterisk management.";
+
+		leaf enabled {
+			 description "Enable Asterisk";
+			type boolean;
+			default true;
+		}
+	}
+
+	container sip {
+		description
+		 "Configuration for SIP.";
+
+		list sip-account {
+			description
+			 "Sip account.";
+
+			key account;
+
+			leaf enabled {
+				 description "Enable this account";
+				type boolean;
+				default "true";
+			}
+			leaf account {
+				 description "Name of the SIP account";
+				type string;
+			}
+			leaf account_name {
+				 description "Name of the account";
+				type string;
+			}
+			leaf domain {
+				 description "SIP doamin name";
+				type string;
+			}
+			leaf username {
+				 description "username";
+				type string;
+			}
+			leaf password {
+				 description "password";
+				type string;
+			}
+			leaf authentication_name {
+				 description "Name used for authentication on SIP server";
+				type string;
+			}
+			leaf display_name {
+				 description "Display name used in Caller Id";
+				type string;
+			}
+			leaf host {
+				 description "SIP server registrar host";
+				type string;
+			}
+			leaf port {
+				 description "SIP server registrar port";
+				type uint32;
+				default '5060';
+			}
+			container outbound {
+				leaf proxy {
+					 description "SIP outbound proxy";
+					type string;
+				}
+				leaf port {
+					 description "SIP outbound proxy port";
+					type uint32;
+					default '5060';
+				}
+			}
+		}
+
+		container advanced {
+			description
+			 "Advanced Sip account settings.";
+
+			leaf rtpstart {
+				 description "rtpstart";
+				type string;
+			}
+			leaf rtpend {
+				 description "rtpend";
+				type string;
+			}
+			leaf dtmfmode {
+				 description "rtpend";
+				type string;
+			}
+		}
+
+		container digitmap {
+			description
+			 "Direct dial numbers.";
+
+			leaf enabled {
+				 description "Enable digitmap";
+				type boolean;
+				default "true";
+			}
+
+			leaf-list dials {
+				 description "Dial number";
+				type string;
+			}
+		}
+	}
+
+	list sip-state {
+		description "State data about SIP.";
+		config false;
+
+		key account;
+
+		leaf account {
+			 description "Name of the SIP account";
+			type string;
+		}
+		leaf registered {
+			 description "SIP registration status";
+			type boolean;
+		}
+		leaf state {
+			 description "SIP connection status";
+			type string;
+		}
+	}
+}

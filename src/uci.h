@@ -1,7 +1,7 @@
 /**
- * @file sip.h
+ * @file uci.h
  * @author Mislav Novakovic <mislav.novakovic@sartur.hr>
- * @brief header file for sip.c.
+ * @brief header file for uci.c.
  *
  * @copyright
  * Copyright (C) 2017 Deutsche Telekom AG.
@@ -19,25 +19,16 @@
  * limitations under the License.
  */
 
-#ifndef SIP_H
-#define SIP_H
-
-#include <sysrepo.h>
-#include <sysrepo/plugins.h>
+#ifndef UCI_H
+#define UCI_H
 
 #include <uci.h>
 
-#define MAX_UCI_PATH 64
+#include "sip.h"
 
-typedef struct ctx_s {
-	const char *yang_model;
-	const char *config_file;
-	struct uci_context *uctx;
-	struct uci_package *package;
-	sr_session_ctx_t *sess;
-	sr_subscription_ctx_t *sub;
-	sr_conn_ctx_t *startup_conn;
-	sr_session_ctx_t *startup_sess;
-} ctx_t;
+int uci_del(ctx_t *ctx, const char *uci);
+int set_uci_section(ctx_t *ctx, char *uci);
+int get_uci_item(struct uci_context *uctx, char *ucipath, char **value);
+int set_uci_item(struct uci_context *uctx, char *ucipath, char *value);
 
-#endif /* SIP_H */
+#endif /* UCI_H */
