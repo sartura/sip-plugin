@@ -1,8 +1,8 @@
 module terastream-sip {
 
-	namespace "urn:opencpe:ts-sip";
+	namespace "http://terastrm.net/ns/yang/terastream-sip"
 
-	prefix "ts-sip";
+	prefix "ts-sp";
 
 	organization
 	    "Deutsche Telekom AG";
