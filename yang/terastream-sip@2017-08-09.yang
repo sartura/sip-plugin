@@ -1,6 +1,6 @@
 module terastream-sip {
 
-	namespace "http://terastrm.net/ns/yang/terastream-sip"
+	namespace "http://terastrm.net/ns/yang/terastream-sip";
 
 	prefix "ts-sp";
 
