@@ -100,11 +100,6 @@ static int parse_change(sr_session_ctx_t *session, const char *module_name, ctx_
             if (-1 == system("/etc/init.d/asterisk restart > /dev/null")) {
                 ERR_MSG("failed to restart voice_client");
             };
-            sleep(1);
-            // TODO asterisk works only after second restart
-            if (-1 == system("/etc/init.d/asterisk restart > /dev/null")) {
-                ERR_MSG("failed to restart voice_client");
-            };
         }
         if (NULL != value) {
             sr_free_val(value);
