@@ -2,6 +2,10 @@
 #include <unistd.h>
 #include <uci.h>
 #include <sys/stat.h>
+#include <libubus.h>
+#include <libubox/blobmsg.h>
+#include <libubox/blobmsg_json.h>
+#include <json-c/json.h>
 
 #include <sysrepo.h>
 #include <sysrepo/plugins.h>
@@ -16,68 +20,105 @@ static const char *yang_model = "terastream-sip";
 
 static int parse_change(sr_session_ctx_t *session, const char *module_name, ctx_t *ctx, sr_notif_event_t event)
 {
-	sr_change_iter_t *it = NULL;
-	int rc = SR_ERR_OK;
-	sr_change_oper_t oper;
-	sr_val_t *old_value = NULL;
-	sr_val_t *new_value = NULL;
-	char xpath[XPATH_MAX_LEN] = {
-		0,
-	};
+    sr_change_iter_t *it = NULL;
+    int rc = SR_ERR_OK;
+    sr_change_oper_t oper;
+    sr_val_t *old_value = NULL;
+    sr_val_t *new_value = NULL;
+    char xpath[XPATH_MAX_LEN] = {
+        0,
+    };
 
-	snprintf(xpath, XPATH_MAX_LEN, "/%s:*", module_name);
+    snprintf(xpath, XPATH_MAX_LEN, "/%s:*", module_name);
 
-	rc = sr_get_changes_iter(session, xpath, &it);
-	if (SR_ERR_OK != rc) {
-		printf("Get changes iter failed for xpath %s", xpath);
-		goto error;
-	}
+    rc = sr_get_changes_iter(session, xpath, &it);
+    if (SR_ERR_OK != rc) {
+        printf("Get changes iter failed for xpath %s", xpath);
+        goto error;
+    }
 
-	while (SR_ERR_OK == sr_get_change_next(session, it, &oper, &old_value, &new_value)) {
-		rc = sysrepo_to_uci(ctx, oper, old_value, new_value, event);
-		sr_free_val(old_value);
-		sr_free_val(new_value);
-		CHECK_RET(rc, error, "failed to add operation: %s", sr_strerror(rc));
-	}
+    while (SR_ERR_OK == sr_get_change_next(session, it, &oper, &old_value, &new_value)) {
+        rc = sysrepo_to_uci(ctx, oper, old_value, new_value, event);
+        sr_free_val(old_value);
+        sr_free_val(new_value);
+        CHECK_RET(rc, error, "failed to add operation: %s", sr_strerror(rc));
+    }
 
-	DBG_MSG("restart voice_client");
-	pid_t pid = fork();
-	if (0 == pid) {
-		if (-1 == system("/etc/init.d/voice_client reload > /dev/null")) {
-			ERR_MSG("failed to reload voice_client");
-		};
+    DBG_MSG("restart voice_client");
+    pid_t pid = fork();
+    if (0 == pid) {
+        struct blob_buf buf = {0};
+        struct json_object *p;
+        uint32_t id = 0;
+        int u_rc = 0;
 
-		sr_val_t *value = NULL;
-		rc = sr_get_item(session, "/terastream-sip:asterisk/enabled", &value);
-		if (SR_ERR_OK != rc) {
-			ERR("Could nog get /terastream-sip:asterisk/enabled, error: %s", sr_strerror(rc));
-			exit(127);
-		}
+        struct ubus_context *u_ctx = ubus_connect(NULL);
+        if (u_ctx == NULL) {
+            ERR_MSG("Could not connect to ubus");
+            goto cleanup;
+        }
 
-		if (true == value->data.bool_val) {
-			//TODO get asterisk state
-			if (-1 == system("/etc/init.d/asterisk restart > /dev/null")) {
-				ERR_MSG("failed to restart voice_client");
-			};
-			sleep(1);
-			//TODO asterisk works only after second restart
-			if (-1 == system("/etc/init.d/asterisk restart > /dev/null")) {
-				ERR_MSG("failed to restart voice_client");
-			};
-		}
-		if (NULL != value) {
-			sr_free_val(value);
-		}
-		exit(127);
-	} else {
-		waitpid(pid, 0, 0);
-	}
+        blob_buf_init(&buf, 0);
+        u_rc = ubus_lookup_id(u_ctx, "uci", &id);
+        if (UBUS_STATUS_OK != u_rc) {
+            ERR("ubus [%d]: no object network\n", u_rc);
+            goto cleanup;
+        }
+
+        p = json_object_new_object();
+        json_object_object_add(p, "config", json_object_new_string("voice_client"));
+
+        const char *json_data = json_object_get_string(p);
+        blobmsg_add_json_from_string(&buf, json_data);
+        json_object_put(p);
+
+        u_rc = ubus_invoke(u_ctx, id, "commit", buf.head, NULL, NULL, 1000);
+        if (UBUS_STATUS_OK != u_rc) {
+            ERR("ubus [%d]: no object restart\n", u_rc);
+            goto cleanup;
+        }
+
+    cleanup:
+        if (NULL != u_ctx) {
+            ubus_free(u_ctx);
+            blob_buf_free(&buf);
+        }
+
+        if (-1 == system("/etc/init.d/voice_client reload > /dev/null")) {
+            ERR_MSG("failed to reload voice_client");
+        };
+
+        sr_val_t *value = NULL;
+        rc = sr_get_item(session, "/terastream-sip:asterisk/enabled", &value);
+        if (SR_ERR_OK != rc) {
+            ERR("Could nog get /terastream-sip:asterisk/enabled, error: %s", sr_strerror(rc));
+            exit(127);
+        }
+
+        if (true == value->data.bool_val) {
+            // TODO get asterisk state
+            if (-1 == system("/etc/init.d/asterisk restart > /dev/null")) {
+                ERR_MSG("failed to restart voice_client");
+            };
+            sleep(1);
+            // TODO asterisk works only after second restart
+            if (-1 == system("/etc/init.d/asterisk restart > /dev/null")) {
+                ERR_MSG("failed to restart voice_client");
+            };
+        }
+        if (NULL != value) {
+            sr_free_val(value);
+        }
+        exit(127);
+    } else {
+        waitpid(pid, 0, 0);
+    }
 
 error:
-	if (NULL != it) {
-		sr_free_change_iter(it);
-	}
-	return rc;
+    if (NULL != it) {
+        sr_free_change_iter(it);
+    }
+    return rc;
 }
 
 static int module_change_cb(sr_session_ctx_t *session, const char *module_name, sr_notif_event_t event, void *private_ctx)

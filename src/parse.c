@@ -108,9 +108,9 @@ uci_error:
 
 int sysrepo_list_callback(ctx_t *ctx, sr_change_oper_t op, char *orig_xpath, char *orig_ucipath, char *key, sr_val_t *val) {
 	int rc = SR_ERR_OK;
-    size_t count = 0;
+	size_t count = 0;
 	bool enabled = true;
-    sr_val_t *values = NULL;
+	sr_val_t *values = NULL;
 	struct uci_ptr ptr = {};
 	char set_path[XPATH_MAX_LEN] = {0};
 	char ucipath[] = "voice_client.direct_dial.direct_dial";
