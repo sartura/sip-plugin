@@ -165,7 +165,6 @@ RUN \
       cd /opt/dev && \
 	  git clone https://github.com/sartura/sip-plugin.git && \
 	  cd sip-plugin && mkdir build && cd build && \
-	  git checkout yang && \
 	  cmake .. && \
 	  make -j2 && \
 	  make install && \
