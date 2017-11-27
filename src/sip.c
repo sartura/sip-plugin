@@ -37,8 +37,33 @@ static int parse_change(sr_session_ctx_t *session, const char *module_name, ctx_
         goto error;
     }
 
+    /* dials list needs only one callback */
+    const char *dials_xpath = "/terastream-sip:sip/digitmap/dials";
+    bool first_dials = true;
+
     while (SR_ERR_OK == sr_get_change_next(session, it, &oper, &old_value, &new_value)) {
-        rc = sysrepo_to_uci(ctx, oper, old_value, new_value, event);
+        bool skip = false;
+        char *tmp_xpath = NULL;
+
+        /* get leaf's xpath */
+        if (SR_OP_DELETED == oper) {
+            tmp_xpath = old_value->xpath;
+        } else {
+            tmp_xpath = new_value->xpath;
+        }
+
+        if (0 == strncmp(tmp_xpath, dials_xpath, strlen(dials_xpath))) {
+            /* if first dials update uci */
+            if (true == first_dials) {
+                rc = sysrepo_to_uci(ctx, oper, old_value, new_value, event);
+            }
+            /* block any further changes with leaf containing xpath dials */
+            first_dials = false;
+            skip = !first_dials;
+        }
+        if (false == skip) {
+            rc = sysrepo_to_uci(ctx, oper, old_value, new_value, event);
+        }
         sr_free_val(old_value);
         sr_free_val(new_value);
         CHECK_RET(rc, error, "failed to add operation: %s", sr_strerror(rc));
