@@ -396,9 +396,13 @@ int toggle_asterisk(sr_val_t *val)
 
 	if (pid == 0) {
 		if (val->data.bool_val) {
-			execl("/etc/init.d/asterisk", "asterisk", "start", (char *) NULL);
+			if (-1 == system("/etc/init.d/voice_client start > /dev/null")) {
+				ERR_MSG("failed to start voice_client");
+			};
 		} else {
-			execl("/etc/init.d/asterisk", "asterisk", "stop", (char *) NULL);
+			if (-1 == system("/etc/init.d/voice_client stop > /dev/null")) {
+				ERR_MSG("failed to stop voice_client");
+			};
 		}
 		exit(127);
 	} else {

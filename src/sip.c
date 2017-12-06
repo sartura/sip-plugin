@@ -109,10 +109,6 @@ static int parse_change(sr_session_ctx_t *session, const char *module_name, ctx_
             blob_buf_free(&buf);
         }
 
-        if (-1 == system("/etc/init.d/voice_client reload > /dev/null")) {
-            ERR_MSG("failed to reload voice_client");
-        };
-
         sr_val_t *value = NULL;
         rc = sr_get_item(session, "/terastream-sip:asterisk/enabled", &value);
         if (SR_ERR_OK != rc) {
@@ -122,8 +118,8 @@ static int parse_change(sr_session_ctx_t *session, const char *module_name, ctx_
 
         if (true == value->data.bool_val) {
             // TODO get asterisk state
-            if (-1 == system("/etc/init.d/asterisk restart > /dev/null")) {
-                ERR_MSG("failed to restart voice_client");
+            if (-1 == system("/etc/init.d/voice_client reload > /dev/null")) {
+                ERR_MSG("failed to reload voice_client");
             };
         }
         if (NULL != value) {
