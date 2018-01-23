@@ -574,47 +574,73 @@ void ubus_cb(struct ubus_request *req, int type, struct blob_attr *msg)
 		goto cleanup;
 	}
 
-	json_object_object_get_ex(r, "sip", &o);
-
-	/* get array size */
-	json_object_object_foreach(o, key_tmp, val_tmp) {
-		if (NULL != key_tmp && NULL != val_tmp) {
-			counter++;
-		}
+	json_object_object_get_ex(r, "registry", &o);
+	if (NULL == o) {
+		DBG_MSG("no registry array in json object");
+		goto cleanup;
 	}
 
-	rc = sr_new_values(counter * 3, &sr_val);
+	/* get array size */
+	counter = json_object_array_length(o);
+	if (0 == counter) {
+		DBG_MSG("no objects in registry array");
+		goto cleanup;
+	}
+
+	rc = sr_new_values(counter * 4, &sr_val);
 	CHECK_RET(rc, cleanup, "failed sr_new_values: %s", sr_strerror(rc));
 
-	counter = 0;
-	json_object_object_foreach(o, key, val)
-	{
-		snprintf(xpath, XPATH_MAX_LEN, "/terastream-sip:sip-state[account='%s']/account", key);
-		rc = sr_val_set_xpath(&sr_val[counter], xpath);
-		CHECK_RET(rc, cleanup, "failed sr_val_set_xpath: %s", sr_strerror(rc));
-		rc = sr_val_set_str_data(&sr_val[counter], SR_STRING_T, key);
-		CHECK_RET(rc, cleanup, "failed sr_val_set_str_data: %s", sr_strerror(rc));
-		counter++;
+	int sr_item = 0;
+	for (int i = 0; i < counter; i++) {
+		struct json_object *val, *json_key;
+		char *key = NULL;
 
-		json_object_object_get_ex(val, "registered", &v);
-		snprintf(xpath, XPATH_MAX_LEN, "/terastream-sip:sip-state[account='%s']/registered", key);
-		rc = sr_val_set_xpath(&sr_val[counter], xpath);
+		val = json_object_array_get_idx(o, i);
+		if (NULL == val) {
+			continue;
+		}
+		json_object_object_get_ex(val, "name", &json_key);
+		key = (char *) json_object_get_string(json_key);
+
+		json_object_object_get_ex(val, "username", &v);
+		snprintf(xpath, XPATH_MAX_LEN, "/terastream-sip:sip-state[account='%s']/username", key);
+		rc = sr_val_set_xpath(&sr_val[sr_item], xpath);
 		CHECK_RET(rc, cleanup, "failed sr_val_set_xpath: %s", sr_strerror(rc));
-		(&sr_val[counter])->data.bool_val = json_object_get_boolean(v);
-		(&sr_val[counter])->type = SR_BOOL_T;
-		counter++;
+		rc = sr_val_set_str_data(&sr_val[sr_item], SR_STRING_T, (char *) json_object_get_string(v));
+		CHECK_RET(rc, cleanup, "failed sr_val_set_str_data: %s", sr_strerror(rc));
+		sr_item++;
+
+		json_object_object_get_ex(val, "refresh", &v);
+		snprintf(xpath, XPATH_MAX_LEN, "/terastream-sip:sip-state[account='%s']/refresh", key);
+		rc = sr_val_set_xpath(&sr_val[sr_item], xpath);
+		CHECK_RET(rc, cleanup, "failed sr_val_set_xpath: %s", sr_strerror(rc));
+		(&sr_val[sr_item])->data.uint32_val = (uint32_t) json_object_get_int64(v);
+		(&sr_val[sr_item])->type = SR_UINT32_T;
+		sr_item++;
 
 		json_object_object_get_ex(val, "state", &v);
 		snprintf(xpath, XPATH_MAX_LEN, "/terastream-sip:sip-state[account='%s']/state", key);
-		rc = sr_val_set_xpath(&sr_val[counter], xpath);
+		rc = sr_val_set_xpath(&sr_val[sr_item], xpath);
 		CHECK_RET(rc, cleanup, "failed sr_val_set_xpath: %s", sr_strerror(rc));
-		rc = sr_val_set_str_data(&sr_val[counter], SR_STRING_T, (char *) json_object_get_string(v));
+		rc = sr_val_set_str_data(&sr_val[sr_item], SR_STRING_T, (char *) json_object_get_string(v));
 		CHECK_RET(rc, cleanup, "failed sr_val_set_str_data: %s", sr_strerror(rc));
-		counter++;
+		sr_item++;
+
+		snprintf(xpath, XPATH_MAX_LEN, "/terastream-sip:sip-state[account='%s']/registered", key);
+		rc = sr_val_set_xpath(&sr_val[sr_item], xpath);
+		CHECK_RET(rc, cleanup, "failed sr_val_set_xpath: %s", sr_strerror(rc));
+		bool registered = (0 == strcmp("Registered", json_object_get_string(v)) ? true : false);
+		(&sr_val[sr_item])->data.bool_val = registered;
+		(&sr_val[sr_item])->type = SR_BOOL_T;
+		sr_item++;
 	}
 
-	*ubus_ctx->values_cnt = counter;
+	*ubus_ctx->values_cnt = counter * 4;
 	*ubus_ctx->values = sr_val;
+
+	for (int i = 0; i < counter * 4; i++) {
+		sr_print_val(&sr_val[i]);
+	}
 
 cleanup:
 	if (NULL != r) {
@@ -642,7 +668,7 @@ int fill_state_data(ctx_t *ctx, char *xpath, sr_val_t **values, size_t *values_c
 	}
 
 	blob_buf_init(&buf, 0);
-	u_rc = ubus_lookup_id(u_ctx, "asterisk", &id);
+	u_rc = ubus_lookup_id(u_ctx, "asterisk.sip", &id);
 	if (UBUS_STATUS_OK != u_rc) {
 		ERR("ubus [%d]: no object asterisk\n", u_rc);
 		rc = SR_ERR_INTERNAL;
@@ -652,7 +678,7 @@ int fill_state_data(ctx_t *ctx, char *xpath, sr_val_t **values, size_t *values_c
 	ubus_ctx.ctx = ctx;
 	ubus_ctx.values = values;
 	ubus_ctx.values_cnt = values_cnt;
-	u_rc = ubus_invoke(u_ctx, id, "status", buf.head, ubus_cb, &ubus_ctx, 0);
+	u_rc = ubus_invoke(u_ctx, id, "registry_status", buf.head, ubus_cb, &ubus_ctx, 0);
 	if (UBUS_STATUS_OK != u_rc) {
 		ERR("ubus [%d]: no object asterisk\n", u_rc);
 		rc = SR_ERR_INTERNAL;

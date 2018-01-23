@@ -148,5 +148,13 @@ module terastream-sip {
 			 description "SIP connection status";
 			type string;
 		}
+		leaf username {
+			 description "Username used";
+			type string;
+		}
+		leaf refresh {
+			 description "Refresh rate";
+			type uint32;
+		}
 	}
 }

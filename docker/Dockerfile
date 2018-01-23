@@ -175,9 +175,9 @@ EXPOSE 830
 
 COPY voice_client /etc/config/voice_client
 
-COPY asterisk /usr/libexec/rpcd/asterisk
+COPY asterisk.sip /usr/libexec/rpcd/asterisk.sip
 
-RUN chmod +x /usr/libexec/rpcd/asterisk
+RUN chmod +x /usr/libexec/rpcd/asterisk.sip
 
 RUN echo '#!/bin/sh' > /etc/init.d/voice_client && chmod +x /etc/init.d/voice_client
 
