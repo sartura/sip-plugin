@@ -1,0 +1,847 @@
+[login]
+
+address = "192.168.1.1:830"
+username = "root"
+password = "root"
+
+### account_name ###
+[[unitTest]]
+
+name = "account_name"
+
+[[unitTest.test]]
+
+RPC = """
+<get>
+  <filter  xmlns:terastream-sip='http://terastrm.net/ns/yang/terastream-sip'  type="xpath" select="/terastream-sip:sip/sip-account[account='sip0']/account_name">
+  </filter>
+</get>
+"""
+
+Reply ="""<data xmlns="urn:ietf:params:xml:ns:netconf:base:1.0"><sip xmlns="http://terastrm.net/ns/yang/terastream-sip"><sip-account><account>sip0</account><account_name>PANTERA-1</account_name></sip-account></sip></data>"""
+
+[[unitTest.test]]
+
+RPC = """
+<edit-config>
+  <target>
+    <running/>
+  </target>
+  <config>
+    <sip xmlns="http://terastrm.net/ns/yang/terastream-sip">
+      <sip-account>
+        <account>sip0</account>
+        <account_name>TEST-1</account_name>
+      </sip-account>
+    </sip>
+  </config>
+</edit-config>
+"""
+
+Reply= """<ok/>"""
+
+[[unitTest.test]]
+
+# this requires installed and running YANG plugi test-plugin
+# https://github.com/sartura/test-plugin
+
+RPC = """
+  <call xmlns="urn:ietf:params:xml:ns:yang:test-plugin">
+    <command>uci get voice_client.sip0.name</command>
+  </call>
+"""
+
+Reply = """<response xmlns="urn:ietf:params:xml:ns:yang:test-plugin">TEST-1
+</response>"""
+
+[[unitTest.test]]
+
+RPC = """
+<edit-config>
+  <target>
+    <running/>
+  </target>
+  <config>
+    <sip xmlns="http://terastrm.net/ns/yang/terastream-sip">
+      <sip-account>
+        <account>sip0</account>
+        <account_name>PANTERA-1</account_name>
+      </sip-account>
+    </sip>
+  </config>
+</edit-config>
+"""
+
+Reply= """<ok/>"""
+
+
+### display_name ###
+[[unitTest]]
+
+name = "display_name"
+
+[[unitTest.test]]
+
+RPC = """
+<get>
+  <filter  xmlns:terastream-sip='http://terastrm.net/ns/yang/terastream-sip'  type="xpath" select="/terastream-sip:sip/sip-account[account='sip0']/display_name">
+  </filter>
+</get>
+"""
+
+Reply ="""<data xmlns="urn:ietf:params:xml:ns:netconf:base:1.0"><sip xmlns="http://terastrm.net/ns/yang/terastream-sip"><sip-account><account>sip0</account><display_name>+3852140873X</display_name></sip-account></sip></data>"""
+
+[[unitTest.test]]
+
+RPC = """
+<edit-config>
+  <target>
+    <running/>
+  </target>
+  <config>
+    <sip xmlns="http://terastrm.net/ns/yang/terastream-sip">
+      <sip-account>
+        <account>sip0</account>
+        <display_name>+385111111</display_name>
+      </sip-account>
+    </sip>
+  </config>
+</edit-config>
+"""
+
+Reply= """<ok/>"""
+
+[[unitTest.test]]
+
+# this requires installed and running YANG plugi test-plugin
+# https://github.com/sartura/test-plugin
+
+RPC = """
+  <call xmlns="urn:ietf:params:xml:ns:yang:test-plugin">
+    <command>uci get voice_client.sip0.displayname</command>
+  </call>
+"""
+
+Reply = """<response xmlns="urn:ietf:params:xml:ns:yang:test-plugin">+385111111
+</response>"""
+
+[[unitTest.test]]
+
+RPC = """
+<edit-config>
+  <target>
+    <running/>
+  </target>
+  <config>
+    <sip xmlns="http://terastrm.net/ns/yang/terastream-sip">
+      <sip-account>
+        <account>sip0</account>
+        <display_name>+3852140873X</display_name>
+      </sip-account>
+    </sip>
+  </config>
+</edit-config>
+"""
+
+Reply= """<ok/>"""
+
+
+### enabled ###
+[[unitTest]]
+
+name = "enabled"
+
+[[unitTest.test]]
+
+RPC = """
+<get>
+  <filter  xmlns:terastream-sip='http://terastrm.net/ns/yang/terastream-sip'  type="xpath" select="/terastream-sip:sip/sip-account[account='sip0']/enabled">
+  </filter>
+</get>
+"""
+
+Reply ="""<data xmlns="urn:ietf:params:xml:ns:netconf:base:1.0"><sip xmlns="http://terastrm.net/ns/yang/terastream-sip"><sip-account><account>sip0</account><enabled>false</enabled></sip-account></sip></data>"""
+
+[[unitTest.test]]
+
+RPC = """
+<edit-config>
+  <target>
+    <running/>
+  </target>
+  <config>
+    <sip xmlns="http://terastrm.net/ns/yang/terastream-sip">
+      <sip-account>
+        <account>sip0</account>
+        <enabled>true</enabled>
+      </sip-account>
+    </sip>
+  </config>
+</edit-config>
+"""
+
+Reply= """<ok/>"""
+
+[[unitTest.test]]
+
+# this requires installed and running YANG plugi test-plugin
+# https://github.com/sartura/test-plugin
+
+RPC = """
+  <call xmlns="urn:ietf:params:xml:ns:yang:test-plugin">
+    <command>uci get voice_client.sip0.enabled</command>
+  </call>
+"""
+
+Reply = """<response xmlns="urn:ietf:params:xml:ns:yang:test-plugin">1
+</response>"""
+
+[[unitTest.test]]
+
+RPC = """
+<edit-config>
+  <target>
+    <running/>
+  </target>
+  <config>
+    <sip xmlns="http://terastrm.net/ns/yang/terastream-sip">
+      <sip-account>
+        <account>sip0</account>
+        <enabled>false</enabled>
+      </sip-account>
+    </sip>
+  </config>
+</edit-config>
+"""
+
+Reply= """<ok/>"""
+
+
+### domain ###
+[[unitTest]]
+
+name = "domain"
+
+[[unitTest.test]]
+
+RPC = """
+<get>
+  <filter  xmlns:terastream-sip='http://terastrm.net/ns/yang/terastream-sip'  type="xpath" select="/terastream-sip:sip/sip-account[account='sip0']/domain">
+  </filter>
+</get>
+"""
+
+Reply ="""<data xmlns="urn:ietf:params:xml:ns:netconf:base:1.0"><sip xmlns="http://terastrm.net/ns/yang/terastream-sip"><sip-account><account>sip0</account><domain>ims.t-com.hr</domain></sip-account></sip></data>"""
+
+[[unitTest.test]]
+
+RPC = """
+<edit-config>
+  <target>
+    <running/>
+  </target>
+  <config>
+    <sip xmlns="http://terastrm.net/ns/yang/terastream-sip">
+      <sip-account>
+        <account>sip0</account>
+        <domain>test-domain.com</domain>
+      </sip-account>
+    </sip>
+  </config>
+</edit-config>
+"""
+
+Reply= """<ok/>"""
+
+[[unitTest.test]]
+
+# this requires installed and running YANG plugi test-plugin
+# https://github.com/sartura/test-plugin
+
+RPC = """
+  <call xmlns="urn:ietf:params:xml:ns:yang:test-plugin">
+    <command>uci get voice_client.sip0.domain</command>
+  </call>
+"""
+
+Reply = """<response xmlns="urn:ietf:params:xml:ns:yang:test-plugin">test-domain.com
+</response>"""
+
+[[unitTest.test]]
+
+RPC = """
+<edit-config>
+  <target>
+    <running/>
+  </target>
+  <config>
+    <sip xmlns="http://terastrm.net/ns/yang/terastream-sip">
+      <sip-account>
+        <account>sip0</account>
+        <domain>ims.t-com.hr</domain>
+      </sip-account>
+    </sip>
+  </config>
+</edit-config>
+"""
+
+Reply= """<ok/>"""
+
+
+### username ###
+[[unitTest]]
+
+name = "username"
+
+[[unitTest.test]]
+
+RPC = """
+<get>
+  <filter  xmlns:terastream-sip='http://terastrm.net/ns/yang/terastream-sip'  type="xpath" select="/terastream-sip:sip/sip-account[account='sip0']/username">
+  </filter>
+</get>
+"""
+
+Reply ="""<data xmlns="urn:ietf:params:xml:ns:netconf:base:1.0"><sip xmlns="http://terastrm.net/ns/yang/terastream-sip"><sip-account><account>sip0</account><username>+3852140873X</username></sip-account></sip></data>"""
+
+[[unitTest.test]]
+
+RPC = """
+<edit-config>
+  <target>
+    <running/>
+  </target>
+  <config>
+    <sip xmlns="http://terastrm.net/ns/yang/terastream-sip">
+      <sip-account>
+        <account>sip0</account>
+        <username>test_username</username>
+      </sip-account>
+    </sip>
+  </config>
+</edit-config>
+"""
+
+Reply= """<ok/>"""
+
+[[unitTest.test]]
+
+# this requires installed and running YANG plugi test-plugin
+# https://github.com/sartura/test-plugin
+
+RPC = """
+  <call xmlns="urn:ietf:params:xml:ns:yang:test-plugin">
+    <command>uci get voice_client.sip0.user</command>
+  </call>
+"""
+
+Reply = """<response xmlns="urn:ietf:params:xml:ns:yang:test-plugin">test_username
+</response>"""
+
+[[unitTest.test]]
+
+RPC = """
+<edit-config>
+  <target>
+    <running/>
+  </target>
+  <config>
+    <sip xmlns="http://terastrm.net/ns/yang/terastream-sip">
+      <sip-account>
+        <account>sip0</account>
+        <username>+3852140873X</username>
+      </sip-account>
+    </sip>
+  </config>
+</edit-config>
+"""
+
+Reply= """<ok/>"""
+
+
+### authentication_name ###
+[[unitTest]]
+
+name = "authentication_name"
+
+[[unitTest.test]]
+
+RPC = """
+<get>
+  <filter  xmlns:terastream-sip='http://terastrm.net/ns/yang/terastream-sip'  type="xpath" select="/terastream-sip:sip/sip-account[account='sip0']/authentication_name">
+  </filter>
+</get>
+"""
+
+Reply ="""<data xmlns="urn:ietf:params:xml:ns:netconf:base:1.0"><sip xmlns="http://terastrm.net/ns/yang/terastream-sip"><sip-account><account>sip0</account><authentication_name>3852140873X</authentication_name></sip-account></sip></data>"""
+
+[[unitTest.test]]
+
+RPC = """
+<edit-config>
+  <target>
+    <running/>
+  </target>
+  <config>
+    <sip xmlns="http://terastrm.net/ns/yang/terastream-sip">
+      <sip-account>
+        <account>sip0</account>
+        <authentication_name>test-authname</authentication_name>
+      </sip-account>
+    </sip>
+  </config>
+</edit-config>
+"""
+
+Reply= """<ok/>"""
+
+[[unitTest.test]]
+
+# this requires installed and running YANG plugi test-plugin
+# https://github.com/sartura/test-plugin
+
+RPC = """
+  <call xmlns="urn:ietf:params:xml:ns:yang:test-plugin">
+    <command>uci get voice_client.sip0.authuser</command>
+  </call>
+"""
+
+Reply = """<response xmlns="urn:ietf:params:xml:ns:yang:test-plugin">test-authname
+</response>"""
+
+[[unitTest.test]]
+
+RPC = """
+<edit-config>
+  <target>
+    <running/>
+  </target>
+  <config>
+    <sip xmlns="http://terastrm.net/ns/yang/terastream-sip">
+      <sip-account>
+        <account>sip0</account>
+        <authentication_name>3852140873X</authentication_name>
+      </sip-account>
+    </sip>
+  </config>
+</edit-config>
+"""
+
+Reply= """<ok/>"""
+
+
+### host ###
+[[unitTest]]
+
+name = "host"
+
+[[unitTest.test]]
+
+RPC = """
+<get>
+  <filter  xmlns:terastream-sip='http://terastrm.net/ns/yang/terastream-sip'  type="xpath" select="/terastream-sip:sip/sip-account[account='sip0']/host">
+  </filter>
+</get>
+"""
+
+Reply ="""<data xmlns="urn:ietf:params:xml:ns:netconf:base:1.0"><sip xmlns="http://terastrm.net/ns/yang/terastream-sip"><sip-account><account>sip0</account><host>ims.t-com.hr</host></sip-account></sip></data>"""
+
+[[unitTest.test]]
+
+RPC = """
+<edit-config>
+  <target>
+    <running/>
+  </target>
+  <config>
+    <sip xmlns="http://terastrm.net/ns/yang/terastream-sip">
+      <sip-account>
+        <account>sip0</account>
+        <host>test-host.com</host>
+      </sip-account>
+    </sip>
+  </config>
+</edit-config>
+"""
+
+Reply= """<ok/>"""
+
+[[unitTest.test]]
+
+# this requires installed and running YANG plugi test-plugin
+# https://github.com/sartura/test-plugin
+
+RPC = """
+  <call xmlns="urn:ietf:params:xml:ns:yang:test-plugin">
+    <command>uci get voice_client.sip0.host</command>
+  </call>
+"""
+
+Reply = """<response xmlns="urn:ietf:params:xml:ns:yang:test-plugin">test-host.com
+</response>"""
+
+[[unitTest.test]]
+
+RPC = """
+<edit-config>
+  <target>
+    <running/>
+  </target>
+  <config>
+    <sip xmlns="http://terastrm.net/ns/yang/terastream-sip">
+      <sip-account>
+        <account>sip0</account>
+        <host>ims.t-com.hr</host>
+      </sip-account>
+    </sip>
+  </config>
+</edit-config>
+"""
+
+Reply= """<ok/>"""
+
+
+### advanced_rtpstart ###
+[[unitTest]]
+
+name = "advanced_rtpstart"
+
+[[unitTest.test]]
+
+RPC = """
+<get>
+  <filter  xmlns:terastream-sip='http://terastrm.net/ns/yang/terastream-sip'  type="xpath" select="/terastream-sip:sip/advanced/rtpstart">
+  </filter>
+</get>
+"""
+
+Reply ="""<data xmlns="urn:ietf:params:xml:ns:netconf:base:1.0"><sip xmlns="http://terastrm.net/ns/yang/terastream-sip"><advanced><rtpstart>40000</rtpstart></advanced></sip></data>"""
+
+[[unitTest.test]]
+
+RPC = """
+<edit-config>
+  <target>
+    <running/>
+  </target>
+  <config>
+    <sip xmlns="http://terastrm.net/ns/yang/terastream-sip">
+      <advanced>
+        <rtpstart>5000</rtpstart>
+      </advanced>
+    </sip>
+  </config>
+</edit-config>
+"""
+
+Reply= """<ok/>"""
+
+[[unitTest.test]]
+
+# this requires installed and running YANG plugi test-plugin
+# https://github.com/sartura/test-plugin
+
+RPC = """
+  <call xmlns="urn:ietf:params:xml:ns:yang:test-plugin">
+    <command>uci get voice_client.SIP.rtpstart</command>
+  </call>
+"""
+
+Reply = """<response xmlns="urn:ietf:params:xml:ns:yang:test-plugin">5000
+</response>"""
+
+[[unitTest.test]]
+
+RPC = """
+<edit-config>
+  <target>
+    <running/>
+  </target>
+  <config>
+    <sip xmlns="http://terastrm.net/ns/yang/terastream-sip">
+      <advanced>
+        <rtpstart>40000</rtpstart>
+      </advanced>
+    </sip>
+  </config>
+</edit-config>
+"""
+
+Reply= """<ok/>"""
+
+
+### advanced_rtpend ###
+[[unitTest]]
+
+name = "advanced_rtpend"
+
+[[unitTest.test]]
+
+RPC = """
+<get>
+  <filter  xmlns:terastream-sip='http://terastrm.net/ns/yang/terastream-sip'  type="xpath" select="/terastream-sip:sip/advanced/rtpend">
+  </filter>
+</get>
+"""
+
+Reply ="""<data xmlns="urn:ietf:params:xml:ns:netconf:base:1.0"><sip xmlns="http://terastrm.net/ns/yang/terastream-sip"><advanced><rtpend>50000</rtpend></advanced></sip></data>"""
+
+[[unitTest.test]]
+
+RPC = """
+<edit-config>
+  <target>
+    <running/>
+  </target>
+  <config>
+    <sip xmlns="http://terastrm.net/ns/yang/terastream-sip">
+      <advanced>
+        <rtpend>55000</rtpend>
+      </advanced>
+    </sip>
+  </config>
+</edit-config>
+"""
+
+Reply= """<ok/>"""
+
+[[unitTest.test]]
+
+# this requires installed and running YANG plugi test-plugin
+# https://github.com/sartura/test-plugin
+
+RPC = """
+  <call xmlns="urn:ietf:params:xml:ns:yang:test-plugin">
+    <command>uci get voice_client.SIP.rtpend</command>
+  </call>
+"""
+
+Reply = """<response xmlns="urn:ietf:params:xml:ns:yang:test-plugin">55000
+</response>"""
+
+[[unitTest.test]]
+
+RPC = """
+<edit-config>
+  <target>
+    <running/>
+  </target>
+  <config>
+    <sip xmlns="http://terastrm.net/ns/yang/terastream-sip">
+      <advanced>
+        <rtpend>50000</rtpend>
+      </advanced>
+    </sip>
+  </config>
+</edit-config>
+"""
+
+Reply= """<ok/>"""
+
+
+### advanced_dtmfmode ###
+[[unitTest]]
+
+name = "advanced_dtmfmode"
+
+[[unitTest.test]]
+
+RPC = """
+<get>
+  <filter  xmlns:terastream-sip='http://terastrm.net/ns/yang/terastream-sip'  type="xpath" select="/terastream-sip:sip/advanced/dtmfmode">
+  </filter>
+</get>
+"""
+
+Reply ="""<data xmlns="urn:ietf:params:xml:ns:netconf:base:1.0"><sip xmlns="http://terastrm.net/ns/yang/terastream-sip"><advanced><dtmfmode>rfc2833</dtmfmode></advanced></sip></data>"""
+
+[[unitTest.test]]
+
+RPC = """
+<edit-config>
+  <target>
+    <running/>
+  </target>
+  <config>
+    <sip xmlns="http://terastrm.net/ns/yang/terastream-sip">
+      <advanced>
+        <dtmfmode>rfc-test</dtmfmode>
+      </advanced>
+    </sip>
+  </config>
+</edit-config>
+"""
+
+Reply= """<ok/>"""
+
+[[unitTest.test]]
+
+# this requires installed and running YANG plugin test-plugin
+# https://github.com/sartura/test-plugin
+
+RPC = """
+  <call xmlns="urn:ietf:params:xml:ns:yang:test-plugin">
+    <command>uci get voice_client.SIP.dtmfmode</command>
+  </call>
+"""
+
+Reply = """<response xmlns="urn:ietf:params:xml:ns:yang:test-plugin">rfc-test
+</response>"""
+
+[[unitTest.test]]
+
+RPC = """
+<edit-config>
+  <target>
+    <running/>
+  </target>
+  <config>
+    <sip xmlns="http://terastrm.net/ns/yang/terastream-sip">
+      <advanced>
+        <dtmfmode>rfc2833</dtmfmode>
+      </advanced>
+    </sip>
+  </config>
+</edit-config>
+"""
+
+Reply= """<ok/>"""
+
+
+### digitmap_dials ###
+[[unitTest]]
+
+name = "digitmap_dials"
+
+[[unitTest.test]]
+
+RPC = """
+<get>
+  <filter  xmlns:terastream-sip='http://terastrm.net/ns/yang/terastream-sip'  type="xpath" select="/terastream-sip:sip/digitmap/dials">
+  </filter>
+</get>
+"""
+
+Reply ="""<data xmlns="urn:ietf:params:xml:ns:netconf:base:1.0"><sip xmlns="http://terastrm.net/ns/yang/terastream-sip"><digitmap><dials>_[2-6]xxxxx</dials><dials>_8[1-8]xxxx</dials><dials>_89xxxxx</dials><dials>_7[1-7]xxxx</dials><dials>_78xxxxx</dials><dials>_1987</dials><dials>_195</dials><dials>_194</dials><dials>_193</dials><dials>_192</dials><dials>_13[012456789]xx</dials><dials>_1[245678]xxx</dials><dials>_118xx</dials><dials>_116xxx</dials><dials>_112</dials><dials>_0[2-5]x[2-6]xxxxx</dials><dials>_0[2-5]x8[1-8]xxxx</dials><dials>_0[2-5]x89xxxxx</dials><dials>_0[2-5]x7[1-7]xxxx</dials><dials>_0[2-5]x78xxxxx</dials><dials>_098[2-8]xxxxx</dials><dials>_0989xxxxxx</dials><dials>_0981xxxxxx</dials><dials>_09[012345679]xxxxxxx</dials><dials>_089xxxxxxxx</dials><dials>_08001xxxxxx</dials><dials>_07[24567]xxxxxx</dials><dials>_06[12459]xxxxxx</dials><dials>_01[2-8]xxxxxx</dials><dials>_*xx*.#</dials><dials>_#xx#</dials><dials>_*xx.#</dials><dials>_*#xx*.#</dials><dials>_*#xx.#</dials></digitmap></sip></data>"""
+
+
+[[unitTest.test]]
+
+RPC = """
+<edit-config>
+  <target>
+    <running/>
+  </target>
+  <config>
+    <sip xmlns="http://terastrm.net/ns/yang/terastream-sip">
+      <digitmap>
+        <dials>_999</dials>
+      </digitmap>
+    </sip>
+  </config>
+</edit-config>
+"""
+
+Reply= """<ok/>"""
+
+[[unitTest.test]]
+
+# this requires installed and running YANG plugin test-plugin
+# https://github.com/sartura/test-plugin
+
+RPC = """
+  <call xmlns="urn:ietf:params:xml:ns:yang:test-plugin">
+    <command>uci get voice_client.direct_dial.direct_dial</command>
+  </call>
+"""
+
+Reply = """<response xmlns="urn:ietf:params:xml:ns:yang:test-plugin">_[2-6]xxxxx _8[1-8]xxxx _89xxxxx _7[1-7]xxxx _78xxxxx _1987 _195 _194 _193 _192 _13[012456789]xx _1[245678]xxx _118xx _116xxx _112 _0[2-5]x[2-6]xxxxx _0[2-5]x8[1-8]xxxx _0[2-5]x89xxxxx _0[2-5]x7[1-7]xxxx _0[2-5]x78xxxxx _098[2-8]xxxxx _0989xxxxxx _0981xxxxxx _09[012345679]xxxxxxx _089xxxxxxxx _08001xxxxxx _07[24567]xxxxxx _06[12459]xxxxxx _01[2-8]xxxxxx _*xx*.# _#xx# _*xx.# _*#xx*.# _*#xx.# _999
+</response>"""
+
+[[unitTest.test]]
+
+RPC = """
+<edit-config>
+  <target>
+    <running/>
+  </target>
+  <config xmlns:xc="urn:ietf:params:xml:ns:netconf:base:1.0">
+    <sip xmlns="http://terastrm.net/ns/yang/terastream-sip">
+      <digitmap>
+        <dials xc:operation="delete">_999</dials>
+      </digitmap>
+    </sip>
+  </config>
+</edit-config>
+"""
+
+Reply= """<ok/>"""
+
+
+### digitmap_enabled ###
+[[unitTest]]
+
+name = "digitmap_enabled"
+
+[[unitTest.test]]
+
+RPC = """
+<get>
+  <filter  xmlns:terastream-sip='http://terastrm.net/ns/yang/terastream-sip'  type="xpath" select="/terastream-sip:sip/digitmap/enabled">
+  </filter>
+</get>
+"""
+
+Reply ="""<data xmlns="urn:ietf:params:xml:ns:netconf:base:1.0"><sip xmlns="http://terastrm.net/ns/yang/terastream-sip"><digitmap><enabled>true</enabled></digitmap></sip></data>"""
+
+[[unitTest.test]]
+
+RPC = """
+<edit-config>
+  <target>
+    <running/>
+  </target>
+  <config>
+    <sip xmlns="http://terastrm.net/ns/yang/terastream-sip">
+      <digitmap>
+        <enabled>false</enabled>
+      </digitmap>
+    </sip>
+  </config>
+</edit-config>
+"""
+
+Reply= """<ok/>"""
+
+[[unitTest.test]]
+
+# this requires installed and running YANG plugin test-plugin
+# https://github.com/sartura/test-plugin
+
+RPC = """
+  <call xmlns="urn:ietf:params:xml:ns:yang:test-plugin">
+    <command>uci show voice_client.direct_dial</command>
+  </call>
+"""
+
+Reply = """<response xmlns="urn:ietf:params:xml:ns:yang:test-plugin">voice_client.direct_dial=direct_dial
+</response>"""
+
+[[unitTest.test]]
+
+RPC = """
+<edit-config>
+  <target>
+    <running/>
+  </target>
+  <config>
+    <sip xmlns="http://terastrm.net/ns/yang/terastream-sip">
+      <digitmap>
+        <enabled>true</enabled>
+      </digitmap>
+    </sip>
+  </config>
+</edit-config>
+"""
+
+Reply= """<ok/>"""
