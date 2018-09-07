@@ -72,43 +72,6 @@ static int parse_change(sr_session_ctx_t *session, const char *module_name, ctx_
     DBG_MSG("restart voice_client");
     pid_t pid = fork();
     if (0 == pid) {
-        struct blob_buf buf = {0};
-        struct json_object *p;
-        uint32_t id = 0;
-        int u_rc = 0;
-
-        struct ubus_context *u_ctx = ubus_connect(NULL);
-        if (u_ctx == NULL) {
-            ERR_MSG("Could not connect to ubus");
-            goto cleanup;
-        }
-
-        blob_buf_init(&buf, 0);
-        u_rc = ubus_lookup_id(u_ctx, "uci", &id);
-        if (UBUS_STATUS_OK != u_rc) {
-            ERR("ubus [%d]: no object network\n", u_rc);
-            goto cleanup;
-        }
-
-        p = json_object_new_object();
-        json_object_object_add(p, "config", json_object_new_string("voice_client"));
-
-        const char *json_data = json_object_get_string(p);
-        blobmsg_add_json_from_string(&buf, json_data);
-        json_object_put(p);
-
-        u_rc = ubus_invoke(u_ctx, id, "commit", buf.head, NULL, NULL, 1000);
-        if (UBUS_STATUS_OK != u_rc) {
-            ERR("ubus [%d]: no object restart\n", u_rc);
-            goto cleanup;
-        }
-
-    cleanup:
-        if (NULL != u_ctx) {
-            ubus_free(u_ctx);
-            blob_buf_free(&buf);
-        }
-
         sr_val_t *value = NULL;
         rc = sr_get_item(session, "/terastream-sip:asterisk/enabled", &value);
         if (SR_ERR_OK != rc) {
