@@ -13,6 +13,7 @@
 #include "common.h"
 #include "sip.h"
 #include "parse.h"
+#include "version.h"
 
 /* name of the uci config file. */
 static const char *config_file = "voice_client";
