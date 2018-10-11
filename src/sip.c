@@ -128,7 +128,12 @@ error:
 	return rc;
 }
 
-static int state_data_cb(const char *xpath, sr_val_t **values, size_t *values_cnt, void *private_ctx)
+static int
+#ifdef SYSREPO_LESS_0_7_5
+state_data_cb(const char *xpath, sr_val_t **values, size_t *values_cnt, void *private_ctx)
+#else
+state_data_cb(const char *xpath, sr_val_t **values, size_t *values_cnt, uint64_t request_id, void *private_ctx)
+#endif
 {
     int rc = SR_ERR_OK;
 	ctx_t *ctx = private_ctx;
