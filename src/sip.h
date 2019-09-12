@@ -23,21 +23,20 @@
 #define SIP_H
 
 #include <sysrepo.h>
-#include <sysrepo/plugins.h>
 
 #include <uci.h>
 
 #define MAX_UCI_PATH 64
 
 typedef struct ctx_s {
-	const char *yang_model;
-	const char *config_file;
-	struct uci_context *uctx;
-	struct uci_package *package;
-	sr_session_ctx_t *sess;
-	sr_subscription_ctx_t *sub;
-	sr_conn_ctx_t *startup_conn;
-	sr_session_ctx_t *startup_sess;
+  const char *yang_model;
+  const char *config_file;
+  struct uci_context *uctx;
+  struct uci_package *package;
+  sr_session_ctx_t *sess;
+  sr_subscription_ctx_t *sub;
+  sr_conn_ctx_t *startup_conn;
+  sr_session_ctx_t *startup_sess;
 } ctx_t;
 
 #endif /* SIP_H */

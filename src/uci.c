@@ -1,96 +1,94 @@
-#include <uci.h>
-#include <sysrepo.h>
+#include <string.h>
 
-#include "sip.h"
+#include <sysrepo.h>
+#include <uci.h>
+
 #include "common.h"
+#include "sip.h"
 #include "uci.h"
 
-int uci_del(ctx_t *ctx, const char *uci)
-{
-	int rc = UCI_OK;
-	struct uci_ptr ptr = {};
+int uci_del(ctx_t *ctx, const char *uci) {
+  int rc = UCI_OK;
+  struct uci_ptr ptr = {};
 
-	uci_lookup_ptr(ctx->uctx, &ptr, (char *) uci, true);
-	UCI_CHECK_RET(rc, error, "uci_lookup_ptr %d, path %s", rc, uci);
+  uci_lookup_ptr(ctx->uctx, &ptr, (char *)uci, true);
+  UCI_CHECK_RET(rc, error, "uci_lookup_ptr %d, path %s", rc, uci);
 
-	uci_delete(ctx->uctx, &ptr);
-	UCI_CHECK_RET(rc, error, "uci_set %d, path %s", rc, uci);
+  uci_delete(ctx->uctx, &ptr);
+  UCI_CHECK_RET(rc, error, "uci_set %d, path %s", rc, uci);
 
-	uci_save(ctx->uctx, ptr.p);
-	UCI_CHECK_RET(rc, error, "UCI save error %d, path %s", rc, uci);
+  uci_save(ctx->uctx, ptr.p);
+  UCI_CHECK_RET(rc, error, "UCI save error %d, path %s", rc, uci);
 
-	uci_commit(ctx->uctx, &ptr.p, 1);
-	UCI_CHECK_RET(rc, error, "UCI commit error %d, path %s", rc, uci);
-
-error:
-	return rc;
-}
-
-int set_uci_section(ctx_t *ctx, char *uci)
-{
-	int rc = UCI_OK;
-	struct uci_ptr ptr = {0};
-
-	uci_lookup_ptr(ctx->uctx, &ptr, (char *) uci, true);
-	UCI_CHECK_RET(rc, error, "uci_lookup_ptr %d, path %s", rc, uci);
-
-	uci_set(ctx->uctx, &ptr);
-	UCI_CHECK_RET(rc, error, "uci_set %d, path %s", rc, uci);
-
-	uci_save(ctx->uctx, ptr.p);
-	UCI_CHECK_RET(rc, error, "UCI save error %d, path %s", rc, uci);
-
-	uci_commit(ctx->uctx, &ptr.p, 1);
-	UCI_CHECK_RET(rc, error, "UCI commit error %d, path %s", rc, uci);
+  uci_commit(ctx->uctx, &ptr.p, 1);
+  UCI_CHECK_RET(rc, error, "UCI commit error %d, path %s", rc, uci);
 
 error:
-	return rc;
+  return rc;
 }
 
-int get_uci_item(struct uci_context *uctx, char *ucipath, char **value)
-{
-	int rc = UCI_OK;
-	char path[MAX_UCI_PATH];
-	struct uci_ptr ptr;
+int set_uci_section(ctx_t *ctx, char *uci) {
+  int rc = UCI_OK;
+  struct uci_ptr ptr = {0};
 
-	sprintf(path, "%s", ucipath);
+  uci_lookup_ptr(ctx->uctx, &ptr, (char *)uci, true);
+  UCI_CHECK_RET(rc, error, "uci_lookup_ptr %d, path %s", rc, uci);
 
-	rc = uci_lookup_ptr(uctx, &ptr, path, true);
-	UCI_CHECK_RET(rc, exit, "lookup_pointer %d %s", rc, path);
+  uci_set(ctx->uctx, &ptr);
+  UCI_CHECK_RET(rc, error, "uci_set %d, path %s", rc, uci);
 
-	if (NULL == ptr.o) {
-		INF("Uci item %s not found", ucipath);
-		return UCI_ERR_NOTFOUND;
-	}
+  uci_save(ctx->uctx, ptr.p);
+  UCI_CHECK_RET(rc, error, "UCI save error %d, path %s", rc, uci);
 
-	strcpy(*value, ptr.o->v.string);
+  uci_commit(ctx->uctx, &ptr.p, 1);
+  UCI_CHECK_RET(rc, error, "UCI commit error %d, path %s", rc, uci);
 
-exit:
-	return rc;
+error:
+  return rc;
 }
 
-int set_uci_item(struct uci_context *uctx, char *ucipath, char *value)
-{
-	int rc = UCI_OK;
-	struct uci_ptr ptr;
-	char *set_path = calloc(1, MAX_UCI_PATH);
+int get_uci_item(struct uci_context *uctx, char *ucipath, char **value) {
+  int rc = UCI_OK;
+  char path[MAX_UCI_PATH];
+  struct uci_ptr ptr;
 
-	sprintf(set_path, "%s%s%s", ucipath, "=", value);
+  sprintf(path, "%s", ucipath);
 
-	rc = uci_lookup_ptr(uctx, &ptr, set_path, true);
-	UCI_CHECK_RET(rc, exit, "lookup_pointer %d %s", rc, set_path);
+  rc = uci_lookup_ptr(uctx, &ptr, path, true);
+  UCI_CHECK_RET(rc, exit, "lookup_pointer %d %s", rc, path);
 
-	rc = uci_set(uctx, &ptr);
-	UCI_CHECK_RET(rc, exit, "uci_set %d %s", rc, set_path);
+  if (NULL == ptr.o) {
+    INF("Uci item %s not found", ucipath);
+    return UCI_ERR_NOTFOUND;
+  }
 
-	rc = uci_save(uctx, ptr.p);
-	UCI_CHECK_RET(rc, exit, "uci_save %d %s", rc, set_path);
-
-	rc = uci_commit(uctx, &(ptr.p), false);
-	UCI_CHECK_RET(rc, exit, "uci_commit %d %s", rc, set_path);
+  strcpy(*value, ptr.o->v.string);
 
 exit:
-	free(set_path);
+  return rc;
+}
 
-	return rc;
+int set_uci_item(struct uci_context *uctx, char *ucipath, char *value) {
+  int rc = UCI_OK;
+  struct uci_ptr ptr;
+  char *set_path = calloc(1, MAX_UCI_PATH);
+
+  sprintf(set_path, "%s%s%s", ucipath, "=", value);
+
+  rc = uci_lookup_ptr(uctx, &ptr, set_path, true);
+  UCI_CHECK_RET(rc, exit, "lookup_pointer %d %s", rc, set_path);
+
+  rc = uci_set(uctx, &ptr);
+  UCI_CHECK_RET(rc, exit, "uci_set %d %s", rc, set_path);
+
+  rc = uci_save(uctx, ptr.p);
+  UCI_CHECK_RET(rc, exit, "uci_save %d %s", rc, set_path);
+
+  rc = uci_commit(uctx, &(ptr.p), false);
+  UCI_CHECK_RET(rc, exit, "uci_commit %d %s", rc, set_path);
+
+exit:
+  free(set_path);
+
+  return rc;
 }
