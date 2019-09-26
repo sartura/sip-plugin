@@ -72,7 +72,7 @@ int sysrepo_boolean_callback(ctx_t *ctx, sr_change_oper_t op, char *xpath,
              "/terastream-sip:sip/sip-account[account='%s']/password", key);
     snprintf(password_ucipath, XPATH_MAX_LEN, "voice_client.%s.secret", key);
 
-    rc = sr_get_item(ctx->sess, password_xpath, &value);
+    rc = sr_get_item(ctx->sess, password_xpath, 0, &value);
     if (SR_ERR_NOT_FOUND == rc) {
       return SR_ERR_OK;
     } else if (SR_ERR_OK != rc) {
@@ -122,7 +122,8 @@ int sysrepo_list_callback(ctx_t *ctx, sr_change_oper_t op, char *orig_xpath,
   char xpath[] = "/terastream-sip:sip/digitmap/dials";
 
   /* check if digitmap is enabled */
-  rc = sr_get_item(ctx->sess, "/terastream-sip:sip/digitmap/enabled", &values);
+  rc = sr_get_item(ctx->sess, "/terastream-sip:sip/digitmap/enabled", 0,
+                   &values);
   CHECK_RET(rc, cleanup, "failed sr_get_item: %s", sr_strerror(rc));
   enabled = values->data.bool_val;
   sr_free_val(values);
@@ -140,7 +141,7 @@ int sysrepo_list_callback(ctx_t *ctx, sr_change_oper_t op, char *orig_xpath,
   }
 
   /* get all list instances */
-  rc = sr_get_items(ctx->sess, xpath, &values, &count);
+  rc = sr_get_items(ctx->sess, xpath, 0, &values, &count);
   CHECK_RET(rc, cleanup, "failed sr_get_items: %s", sr_strerror(rc));
 
   for (size_t i = 0; i < count; i++) {
@@ -511,7 +512,7 @@ static int init_sysrepo_data(ctx_t *ctx) {
   CHECK_RET(rc, cleanup, "failed sr_set_item_str: %s", sr_strerror(rc));
 
   /* commit the changes to startup datastore */
-  rc = sr_apply_changes(ctx->startup_sess);
+  rc = sr_apply_changes(ctx->startup_sess, 0);
   CHECK_RET(rc, cleanup, "failed sr_apply_changes: %s", sr_strerror(rc));
 
   return SR_ERR_OK;
