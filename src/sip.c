@@ -115,7 +115,6 @@ static int module_change_cb(sr_session_ctx_t *session, const char *module_name, 
 		rc = sr_copy_config(ctx->startup_sess, module_name, SR_DS_RUNNING, SR_DS_STARTUP);
 		if (SR_ERR_OK != rc) {
 			WRN_MSG("Failed to copy running datastore to startup");
-			/* TODO handle this error */
 			return rc;
 		}
 		return SR_ERR_OK;
@@ -128,14 +127,7 @@ error:
 	return rc;
 }
 
-static int
-#if defined(SYSREPO_LESS_0_7_5)
-state_data_cb(const char *xpath, sr_val_t **values, size_t *values_cnt, void *private_ctx)
-#elif defined(SYSREPO_LESS_0_7_7)
-state_data_cb(const char *xpath, sr_val_t **values, size_t *values_cnt, uint64_t request_id, void *private_ctx)
-#else
-state_data_cb(const char *xpath, sr_val_t **values, size_t *values_cnt, uint64_t request_id, const char *original_xpath, void *private_ctx)
-#endif
+static int state_data_cb(const char *xpath, sr_val_t **values, size_t *values_cnt, uint64_t request_id, const char *original_xpath, void *private_ctx)
 {
     int rc = SR_ERR_OK;
 	ctx_t *ctx = private_ctx;

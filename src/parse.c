@@ -638,10 +638,6 @@ void ubus_cb(struct ubus_request *req, int type, struct blob_attr *msg)
 	*ubus_ctx->values_cnt = counter * 4;
 	*ubus_ctx->values = sr_val;
 
-	for (int i = 0; i < counter * 4; i++) {
-		sr_print_val(&sr_val[i]);
-	}
-
 cleanup:
 	if (NULL != r) {
 		json_object_put(r);
