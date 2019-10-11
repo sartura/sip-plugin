@@ -526,34 +526,40 @@ cleanup:
 }
 
 int sync_datastores(ctx_t *ctx) {
-  char startup_file[XPATH_MAX_LEN] = {0};
+  char *datatstore_command = NULL;
   int rc = SR_ERR_OK;
-  struct stat st;
+  FILE *fp;
 
   /* check if the startup datastore is empty
-   * by checking the content of the file */
-  snprintf(startup_file, XPATH_MAX_LEN, "/etc/sysrepo/data/%s.startup",
-           ctx->yang_model);
+   * by checking the output of sysrepocfg */
 
-  if (stat(startup_file, &st) != 0) {
-    ERR("Could not open sysrepo file %s", startup_file);
-    return SR_ERR_INTERNAL;
-  }
+  int len = strlen(ctx->yang_model) + 30;
+  datatstore_command = malloc(sizeof(char) * len);
+  CHECK_NULL_MSG(datatstore_command, &rc, cleanup, "malloc failed");
 
-  if (0 == st.st_size) {
+  snprintf(datatstore_command, len, "sysrepocfg -X -d startup -m %s", ctx->yang_model);
+
+  fp = popen(datatstore_command, "r");
+  CHECK_NULL_MSG(fp, &rc, cleanup, "popen failed");
+  if (fgetc(fp) != EOF) {
+    /* copy the sysrepo startup datastore to uci */
+    INF_MSG("copy sysrepo data to uci");
+    CHECK_RET(rc, cleanup, "failed to apply sysrepo startup data to snabb: %s",
+              sr_strerror(rc));
+
+  } else {
     /* parse uci config */
     rc = init_sysrepo_data(ctx);
     INF_MSG("copy uci data to sysrepo");
-    CHECK_RET(rc, error, "failed to apply uci data to sysrepo: %s",
-              sr_strerror(rc));
-  } else {
-    /* copy the sysrepo startup datastore to uci */
-    INF_MSG("copy sysrepo data to uci");
-    CHECK_RET(rc, error, "failed to apply sysrepo startup data to snabb: %s",
+    CHECK_RET(rc, cleanup, "failed to apply uci data to sysrepo: %s",
               sr_strerror(rc));
   }
 
-error:
+cleanup:
+  if (NULL != datatstore_command) {
+    free(datatstore_command);
+  }
+  fclose(fp);
   return rc;
 }
 
