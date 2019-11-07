@@ -310,15 +310,15 @@ static int parse_uci_config(ctx_t *ctx, char *key) {
       if (table_sr_uci[i].boolean) {
         if (string_eq(uci_val, "1") || string_eq(uci_val, "true") ||
             string_eq(uci_val, "on")) {
-          rc = sr_set_item_str(ctx->startup_sess, xpath, "true",
+          rc = sr_set_item_str(ctx->startup_sess, xpath, "true", NULL,
                                SR_EDIT_DEFAULT);
         } else {
-          rc = sr_set_item_str(ctx->startup_sess, xpath, "false",
+          rc = sr_set_item_str(ctx->startup_sess, xpath, "false", NULL,
                                SR_EDIT_DEFAULT);
         }
       } else {
-        rc =
-            sr_set_item_str(ctx->startup_sess, xpath, uci_val, SR_EDIT_DEFAULT);
+        rc = sr_set_item_str(ctx->startup_sess, xpath, uci_val, NULL,
+                             SR_EDIT_DEFAULT);
       }
       CHECK_RET(rc, cleanup, "failed sr_set_item_str: %s", sr_strerror(rc));
     }
@@ -332,7 +332,8 @@ static int parse_uci_config(ctx_t *ctx, char *key) {
               sr_strerror(rc));
     snprintf(xpath, XPATH_MAX_LEN,
              "/terastream-sip:sip/sip-account[account='%s']/password", key);
-    rc = sr_set_item_str(ctx->startup_sess, xpath, secret, SR_EDIT_DEFAULT);
+    rc = sr_set_item_str(ctx->startup_sess, xpath, secret, NULL,
+                         SR_EDIT_DEFAULT);
     CHECK_RET(rc, cleanup, "failed sr_set_item_str: %s", sr_strerror(rc));
   } else {
     rc = SR_ERR_OK;
@@ -375,13 +376,13 @@ static int parse_uci_config_list(ctx_t *ctx) {
       goto uci_error;
     }
     digitmap_has_data = true;
-    rc = sr_set_item_str(ctx->startup_sess, xpath_dials, o->e.name,
+    rc = sr_set_item_str(ctx->startup_sess, xpath_dials, o->e.name, NULL,
                          SR_EDIT_DEFAULT);
     CHECK_RET(rc, cleanup, "failed sr_set_item_str: %s", sr_strerror(rc));
   }
 
   char *enabled = digitmap_has_data ? "true" : "false";
-  rc = sr_set_item_str(ctx->startup_sess, xpath_enabled, enabled,
+  rc = sr_set_item_str(ctx->startup_sess, xpath_enabled, enabled, NULL,
                        SR_EDIT_DEFAULT);
   CHECK_RET(rc, cleanup, "failed sr_set_item_str: %s", sr_strerror(rc));
 
@@ -508,7 +509,7 @@ static int init_sysrepo_data(ctx_t *ctx) {
 
   /* add asterisk boolean value */
   rc = sr_set_item_str(ctx->startup_sess, "/terastream-sip:asterisk/enabled",
-                       "true", SR_EDIT_DEFAULT);
+                       "true", NULL, SR_EDIT_DEFAULT);
   CHECK_RET(rc, cleanup, "failed sr_set_item_str: %s", sr_strerror(rc));
 
   /* commit the changes to startup datastore */
