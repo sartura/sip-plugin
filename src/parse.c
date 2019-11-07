@@ -553,9 +553,6 @@ int sync_datastores(ctx_t *ctx) {
   }
 
 cleanup:
-  if (NULL != datatstore_command) {
-    free(datatstore_command);
-  }
   fclose(fp);
   return rc;
 }
