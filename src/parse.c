@@ -141,7 +141,7 @@ int sysrepo_list_callback(ctx_t *ctx, sr_change_oper_t op, char *orig_xpath,
   }
 
   /* get all list instances */
-  rc = sr_get_items(ctx->sess, xpath, 0, &values, &count);
+  rc = sr_get_items(ctx->sess, xpath, 0, 0, &values, &count);
   CHECK_RET(rc, cleanup, "failed sr_get_items: %s", sr_strerror(rc));
 
   for (size_t i = 0; i < count; i++) {
@@ -534,7 +534,8 @@ int sync_datastores(ctx_t *ctx) {
   /* check if the startup datastore is empty
    * by checking the output of sysrepocfg */
 
-  snprintf(datatstore_command, 128, "sysrepocfg -X -d startup -m %s", ctx->yang_model);
+  snprintf(datatstore_command, 128, "sysrepocfg -X -d startup -m %s",
+           ctx->yang_model);
 
   fp = popen(datatstore_command, "r");
   CHECK_NULL_MSG(fp, &rc, cleanup, "popen failed");
