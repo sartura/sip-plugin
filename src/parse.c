@@ -513,7 +513,7 @@ static int init_sysrepo_data(ctx_t *ctx) {
   CHECK_RET(rc, cleanup, "failed sr_set_item_str: %s", sr_strerror(rc));
 
   /* commit the changes to startup datastore */
-  rc = sr_apply_changes(ctx->startup_sess, 0);
+  rc = sr_apply_changes(ctx->startup_sess, 0, 0);
   CHECK_RET(rc, cleanup, "failed sr_apply_changes: %s", sr_strerror(rc));
 
   return SR_ERR_OK;
