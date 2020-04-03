@@ -1,11 +1,11 @@
-#include <json-c/json.h>
+#include <sys/wait.h>
+#include <unistd.h>
+#include <uci.h>
+#include <sys/stat.h>
+#include <libubus.h>
 #include <libubox/blobmsg.h>
 #include <libubox/blobmsg_json.h>
-#include <libubus.h>
-#include <sys/stat.h>
-#include <sys/wait.h>
-#include <uci.h>
-#include <unistd.h>
+#include <json-c/json.h>
 
 #include <sysrepo.h>
 #include <sysrepo/values.h>
