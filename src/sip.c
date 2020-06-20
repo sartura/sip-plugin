@@ -1,269 +1,368 @@
-#include <sys/wait.h>
+#include <inttypes.h>
 #include <unistd.h>
-#include <uci.h>
+#include <string.h>
 #include <sys/stat.h>
-#include <libubus.h>
-#include <libubox/blobmsg.h>
-#include <libubox/blobmsg_json.h>
+#include <sys/wait.h>
+
 #include <json-c/json.h>
 
 #include <sysrepo.h>
-#include <sysrepo/values.h>
+#include <sysrepo/xpath.h>
 
-#include "common.h"
-#include "parse.h"
-#include "sip.h"
-#include "version.h"
+#include <srpo_uci.h>
+#include <srpo_ubus.h>
 
-/* name of the uci config file. */
-static const char *config_file = "voice_client";
-static const char *yang_model = "terastream-sip";
+#include "transform_data.h"
+#include "utils/memory.h"
 
-static int parse_change(sr_session_ctx_t *session, const char *module_name,
-                        ctx_t *ctx, sr_event_t event) {
-  sr_change_iter_t *it = NULL;
-  int rc = SR_ERR_OK;
-  sr_change_oper_t oper;
-  sr_val_t *old_value = NULL;
-  sr_val_t *new_value = NULL;
-  char xpath[XPATH_MAX_LEN] = {
-      0,
-  };
+#define ARRAY_SIZE(X) (sizeof((X)) / sizeof((X)[0]))
 
-  snprintf(xpath, XPATH_MAX_LEN, "/%s:*//.", module_name);
+#define SIP_YANG_MODEL "terastream-sip"
+#define SYSREPOCFG_EMPTY_CHECK_COMMAND "sysrepocfg -X -d running -m " SIP_YANG_MODEL
 
-  rc = sr_get_changes_iter(session, xpath, &it);
-  if (SR_ERR_OK != rc) {
-    ERR("Get changes iter failed for xpath %s", xpath);
-    goto error;
-  }
+typedef struct {
+	const char *value_name;
+	const char *xpath_template;
+} sip_ubus_json_transform_table_t;
 
-  /* dials list needs only one callback */
-  const char *dials_xpath = "/terastream-sip:sip/digitmap/dials";
-  bool first_dials = true;
+int sip_plugin_init_cb(sr_session_ctx_t *session, void **private_data);
+void sip_plugin_cleanup_cb(sr_session_ctx_t *session, void *private_data);
 
-  while (SR_ERR_OK ==
-         sr_get_change_next(session, it, &oper, &old_value, &new_value)) {
-    bool skip = false;
-    char *tmp_xpath = NULL;
+static int sip_module_change_cb(sr_session_ctx_t *session, const char *module_name, const char *xpath, sr_event_t event, uint32_t request_id, void *private_data);
+static int sip_state_data_cb(sr_session_ctx_t *session, const char *module_name, const char *path, const char *request_xpath, uint32_t request_id, struct lyd_node **parent, void *private_data);
 
-    /* get leaf's xpath */
-    if (SR_OP_DELETED == oper) {
-      tmp_xpath = old_value->xpath;
-    } else {
-      tmp_xpath = new_value->xpath;
-    }
+static bool sip_running_datastore_is_empty_check(void);
+static int sip_uci_data_load(sr_session_ctx_t *session);
+static char *sip_xpath_get(const struct lyd_node *node);
 
-    if (0 == strncmp(tmp_xpath, dials_xpath, strlen(dials_xpath))) {
-      /* if first dials update uci */
-      if (true == first_dials) {
-        rc = sysrepo_to_uci(ctx, oper, old_value, new_value, event);
-      }
-      /* block any further changes with leaf containing xpath dials */
-      first_dials = false;
-      skip = !first_dials;
-    }
-    if (false == skip) {
-      rc = sysrepo_to_uci(ctx, oper, old_value, new_value, event);
-    }
-    sr_free_val(old_value);
-    sr_free_val(new_value);
-    CHECK_RET(rc, error, "failed to add operation: %s", sr_strerror(rc));
-  }
+static void sip_ubus(const char *ubus_json, srpo_ubus_result_values_t *values);
+static int store_ubus_values_to_datastore(sr_session_ctx_t *session, const char *request_xpath, srpo_ubus_result_values_t *values, struct lyd_node **parent);
 
-  DBG_MSG("restart voice_client");
-  pid_t pid = fork();
-  if (0 == pid) {
-    sr_val_t *value = NULL;
-    rc = sr_get_item(session, "/terastream-sip:asterisk/enabled", 0, &value);
-    if (SR_ERR_OK != rc) {
-      ERR("Could nog get /terastream-sip:asterisk/enabled, error: %s",
-          sr_strerror(rc));
-      exit(127);
-    }
 
-    if (true == value->data.bool_val) {
-      // TODO get asterisk state
-      if (-1 == system("/etc/init.d/voice_client reload > /dev/null")) {
-        ERR_MSG("failed to reload voice_client");
-      };
-    }
-    if (NULL != value) {
-      sr_free_val(value);
-    }
-    exit(127);
-  } else {
-    waitpid(pid, 0, 0);
-  }
 
-error:
-  if (NULL != it) {
-    sr_free_change_iter(it);
-  }
-  return rc;
+int sip_plugin_init_cb(sr_session_ctx_t *session, void **private_data)
+{
+	int error = 0;
+	sr_conn_ctx_t *connection = NULL;
+	sr_session_ctx_t *startup_session = NULL;
+	sr_subscription_ctx_t *subscription = NULL;
+
+	*private_data = NULL;
+
+	error = srpo_uci_init();
+	if (error) {
+		SRP_LOG_ERR("srpo_uci_init error (%d): %s", error, srpo_uci_error_description_get(error));
+		goto error_out;
+	}
+
+	SRP_LOG_INFMSG("start session to startup datastore");
+
+	connection = sr_session_get_connection(session);
+	error = sr_session_start(connection, SR_DS_STARTUP, &startup_session);
+	if (error) {
+		SRP_LOG_ERR("sr_session_start error (%d): %s", error, sr_strerror(error));
+		goto error_out;
+	}
+
+	*private_data = startup_session;
+
+	if (sip_running_datastore_is_empty_check() == true) {
+		SRP_LOG_INFMSG("running DS is empty, loading data from UCI");
+
+		error = sip_uci_data_load(session);
+		if (error) {
+			SRP_LOG_ERRMSG("sip_uci_data_load error");
+			goto error_out;
+		}
+
+		error = sr_copy_config(startup_session, SIP_YANG_MODEL, SR_DS_RUNNING, 0, 0);
+		if (error) {
+			SRP_LOG_ERR("sr_copy_config error (%d): %s", error, sr_strerror(error));
+			goto error_out;
+		}
+	}
+
+	SRP_LOG_INFMSG("subscribing to module change");
+
+	error = sr_module_change_subscribe(session, SIP_YANG_MODEL, "/" SIP_YANG_MODEL ":*//*", sip_module_change_cb, *private_data, 0, SR_SUBSCR_DEFAULT, &subscription);
+	if (error) {
+		SRP_LOG_ERR("sr_module_change_subscribe error (%d): %s", error, sr_strerror(error));
+		goto error_out;
+	}
+
+  SRP_LOG_INFMSG("subscribing to get oper items");
+
+	error = sr_oper_get_items_subscribe(session, SIP_YANG_MODEL, "/terastream-sip:sip-state", sip_state_data_cb, NULL, SR_SUBSCR_CTX_REUSE, &subscription);
+	if (error) {
+		SRP_LOG_ERR("sr_oper_get_items_subscribe error (%d): %s", error, sr_strerror(error));
+		goto error_out;
+	}
+
+
+	SRP_LOG_INFMSG("plugin init done");
+
+	goto out;
+
+error_out:
+	sr_unsubscribe(subscription);
+
+out:
+
+	return error ? SR_ERR_CALLBACK_FAILED : SR_ERR_OK;
 }
 
-static int module_change_cb(sr_session_ctx_t *session, const char *module_name,
-                            const char *xpath, sr_event_t event,
-                            uint32_t request_id, void *private_data) {
-  int rc = SR_ERR_OK;
-  ctx_t *ctx = private_data;
-  INF("%s configuration has changed.", yang_model);
+static bool sip_running_datastore_is_empty_check(void)
+{
+	FILE *sysrepocfg_DS_empty_check = NULL;
+	bool is_empty = false;
 
-  ctx->sess = session;
+	sysrepocfg_DS_empty_check = popen(SYSREPOCFG_EMPTY_CHECK_COMMAND, "r");
+	if (sysrepocfg_DS_empty_check == NULL) {
+		SRP_LOG_WRN("could not execute %s", SYSREPOCFG_EMPTY_CHECK_COMMAND);
+		is_empty = true;
+		goto out;
+	}
 
-  if (SR_EV_DONE == event) {
-    /* copy running datastore to startup */
+	if (fgetc(sysrepocfg_DS_empty_check) == EOF) {
+		is_empty = true;
+	}
 
-    rc = sr_copy_config(ctx->startup_sess, module_name, SR_DS_RUNNING,
-                        0, 0);
-    if (SR_ERR_OK != rc) {
-      WRN_MSG("Failed to copy running datastore to startup");
-      /* TODO handle this error */
-      return rc;
-    }
-    return SR_ERR_OK;
-  }
+out:
+	if (sysrepocfg_DS_empty_check) {
+		pclose(sysrepocfg_DS_empty_check);
+	}
 
-  rc = parse_change(session, module_name, ctx, event);
-  CHECK_RET(rc, error, "failed to apply sysrepo changes to snabb: %s",
-            sr_strerror(rc));
-
-error:
-  return rc;
+	return is_empty;
 }
 
-static int state_data_cb(sr_session_ctx_t *session, const char *module_name,
-                         const char *path, const char *request_xpath,
-                         uint32_t request_id, struct lyd_node **parent,
-                         void *private_data) {
-  int rc = SR_ERR_OK;
-  ctx_t *ctx = private_data;
-  sr_val_t *values = NULL;
-  size_t values_cnt = 0;
-  char *value_string = NULL;
-  const struct ly_ctx *ly_ctx = NULL;
 
-  rc = fill_state_data(ctx, (char *)path, &values, &values_cnt);
-  if (SR_ERR_OK != rc) {
-    DBG("failed to load state data: %s", sr_strerror(rc));
-    rc = SR_ERR_OK;
-  }
-  CHECK_RET(rc, error, "failed to load state data: %s", sr_strerror(rc));
+void sip_plugin_cleanup_cb(sr_session_ctx_t *session, void *private_data)
+{
+	srpo_uci_cleanup();
 
-  if (*parent == NULL) {
-    ly_ctx = sr_get_context(sr_session_get_connection(session));
-    CHECK_NULL_MSG(ly_ctx, &rc, error,
-                   "sr_get_context error: libyang context is NULL");
-    *parent = lyd_new_path(NULL, ly_ctx, request_xpath, NULL, 0, 0);
-  }
+	sr_session_ctx_t *startup_session = (sr_session_ctx_t *) private_data;
 
-  for (size_t i = 0; i < values_cnt; i++) {
-    value_string = sr_val_to_str(&values[i]);
-    lyd_new_path(*parent, NULL, values[i].xpath, value_string, 0, 0);
-    free(value_string);
-    value_string = NULL;
-  }
+	if (startup_session) {
+		sr_session_stop(startup_session);
+	}
 
-error:
-  if (values != NULL) {
-    sr_free_values(values, values_cnt);
-    values = NULL;
-    values_cnt = 0;
-  }
-  return rc;
+	SRP_LOG_INFMSG("plugin cleanup finished");
 }
 
-int sr_plugin_init_cb(sr_session_ctx_t *session, void **private_ctx) {
-  int rc = SR_ERR_OK;
 
-  /* INF("sr_plugin_init_cb for sysrepo-plugin-dt-network"); */
+static int sip_module_change_cb(sr_session_ctx_t *session, const char *module_name, const char *xpath, sr_event_t event, uint32_t request_id, void *private_data)
+{
+	int error = 0;
+	sr_session_ctx_t *startup_session = (sr_session_ctx_t *) private_data;
+	sr_change_iter_t *sip_server_change_iter = NULL;
+	sr_change_oper_t operation = SR_OP_CREATED;
+	const struct lyd_node *node = NULL;
+	const char *prev_value = NULL;
+	const char *prev_list = NULL;
+	bool prev_default = false;
+	char *node_xpath = NULL;
+	const char *node_value = NULL;
+	char *uci_path = NULL;
+	struct lyd_node_leaf_list *node_leaf_list;
+	struct lys_node_leaf *schema_node_leaf;
+	srpo_uci_transform_data_cb transform_sysrepo_data_cb = NULL;
+	bool has_transform_sysrepo_data_private = false;
+	const char *uci_section_type = NULL;
+	char *uci_section_name = NULL;
+	void *transform_cb_data = NULL;
 
-  ctx_t *ctx = calloc(1, sizeof(*ctx));
-  ctx->sub = NULL;
-  ctx->sess = session;
-  ctx->startup_conn = NULL;
-  ctx->startup_sess = NULL;
-  ctx->yang_model = yang_model;
-  ctx->config_file = config_file;
-  *private_ctx = ctx;
+	SRP_LOG_INF("module_name: %s, xpath: %s, event: %d, request_id: %" PRIu32, module_name, xpath, event, request_id);
 
-  /* Allocate UCI context for uci files. */
-  ctx->uctx = uci_alloc_context();
-  if (NULL == ctx->uctx) {
-    rc = SR_ERR_NOMEM;
-  }
-  CHECK_RET(rc, error, "Can't allocate uci context: %s", sr_strerror(rc));
+	if (event == SR_EV_ABORT) {
+		SRP_LOG_ERR("aborting changes for: %s", xpath);
+		error = -1;
+		goto error_out;
+	}
 
-  /* load the startup datastore */
-  INF_MSG("load sysrepo startup datastore");
-  rc = load_startup_datastore(ctx);
-  CHECK_RET(rc, error, "failed to load startup datastore: %s", sr_strerror(rc));
+	if (event == SR_EV_DONE) {
+		error = sr_copy_config(startup_session, SIP_YANG_MODEL, SR_DS_RUNNING, 0, 0);
+		if (error) {
+			SRP_LOG_ERR("sr_copy_config error (%d): %s", error, sr_strerror(error));
+			goto error_out;
+		}
+	}
 
-  /* sync sysrepo datastore and uci configuration file */
-  rc = sync_datastores(ctx);
-  CHECK_RET(rc, error,
-            "failed to sync sysrepo datastore and cui configuration file: %s",
-            sr_strerror(rc));
+	if (event == SR_EV_CHANGE) {
+		error = sr_get_changes_iter(session, xpath, &sip_server_change_iter);
+		if (error) {
+			SRP_LOG_ERR("sr_get_changes_iter error (%d): %s", error, sr_strerror(error));
+			goto error_out;
+		}
 
-  rc = sr_copy_config(ctx->sess, yang_model, SR_DS_STARTUP,
-                      0, 0);
-  if (SR_ERR_OK != rc) {
-    WRN_MSG("Failed to copy running datastore to startup");
-    /* TODO handle this error */
-    goto error;
-  }
+		while (sr_get_change_tree_next(session, sip_server_change_iter, &operation, &node, &prev_value, &prev_list, &prev_default) == SR_ERR_OK) {
+			node_xpath = sip_xpath_get(node);
 
-  rc =
-      sr_module_change_subscribe(ctx->sess, yang_model, NULL, module_change_cb,
-                                 *private_ctx, 0, SR_SUBSCR_DEFAULT, &ctx->sub);
-  CHECK_RET(rc, error, "initialization error: %s", sr_strerror(rc));
+			error = srpo_uci_xpath_to_ucipath_convert(node_xpath, sip_xpath_uci_path_template_map, ARRAY_SIZE(sip_xpath_uci_path_template_map), &uci_path);
+			if (error && error != SRPO_UCI_ERR_NOT_FOUND) {
+				SRP_LOG_ERR("srpo_uci_xpath_to_ucipath_convert error (%d): %s", error, srpo_uci_error_description_get(error));
+				goto error_out;
+			} else if (error == SRPO_UCI_ERR_NOT_FOUND) {
+				error = 0;
+				SRP_LOG_DBG("xpath %s not found in table", node_xpath);
+				FREE_SAFE(node_xpath);
+				continue;
+			}
 
-  rc = sr_oper_get_items_subscribe(ctx->sess, yang_model,
-                                   "/terastream-sip:sip-state", state_data_cb,
-                                   ctx, SR_SUBSCR_CTX_REUSE, &ctx->sub);
-  CHECK_RET(rc, error, "failed sr_dp_get_items_subscribe: %s", sr_strerror(rc));
+			error = srpo_uci_transform_sysrepo_data_cb_get(node_xpath, sip_xpath_uci_path_template_map, ARRAY_SIZE(sip_xpath_uci_path_template_map), &transform_sysrepo_data_cb);
+			if (error) {
+				SRP_LOG_ERR("srpo_uci_transfor_sysrepo_data_cb_get error (%d): %s", error, srpo_uci_error_description_get(error));
+				goto error_out;
+			}
 
-  INF_MSG("Plugin initialized successfully");
+			error = srpo_uci_has_transform_sysrepo_data_private_get(node_xpath, sip_xpath_uci_path_template_map, ARRAY_SIZE(sip_xpath_uci_path_template_map), &has_transform_sysrepo_data_private);
+			if (error) {
+				SRP_LOG_ERR("srpo_uci_has_transform_sysrepo_data_private_get error (%d): %s", error, srpo_uci_error_description_get(error));
+				goto error_out;
+			}
 
-  return SR_ERR_OK;
+			error = srpo_uci_section_type_get(uci_path, sip_xpath_uci_path_template_map, ARRAY_SIZE(sip_xpath_uci_path_template_map), &uci_section_type);
+			if (error) {
+				SRP_LOG_ERR("srpo_uci_section_type_get error (%d): %s", error, srpo_uci_error_description_get(error));
+				goto error_out;
+			}
 
-error:
-  ERR("Plugin initialization failed: %s", sr_strerror(rc));
-  if (NULL != ctx->sub) {
-    sr_unsubscribe(ctx->sub);
-    ctx->sub = NULL;
-  }
-  return rc;
+			uci_section_name = srpo_uci_section_name_get(uci_path);
+
+			if (node->schema->nodetype == LYS_LEAF || node->schema->nodetype == LYS_LEAFLIST) {
+				node_leaf_list = (struct lyd_node_leaf_list *) node;
+				node_value = node_leaf_list->value_str;
+				if (node_value == NULL) {
+					schema_node_leaf = (struct lys_node_leaf *) node_leaf_list->schema;
+					node_value = schema_node_leaf->dflt ? schema_node_leaf->dflt : "";
+				}
+			}
+
+			SRP_LOG_DBG("uci_path: %s; prev_val: %s; node_val: %s; operation: %d", uci_path, prev_value, node_value, operation);
+
+			if (node->schema->nodetype == LYS_LIST) {
+				if (operation == SR_OP_CREATED) {
+					error = srpo_uci_section_create(uci_path, uci_section_type);
+					if (error) {
+						SRP_LOG_ERR("srpo_uci_section_create error (%d): %s", error, srpo_uci_error_description_get(error));
+						goto error_out;
+					}
+				} else if (operation == SR_OP_DELETED) {
+					error = srpo_uci_section_delete(uci_path);
+					if (error) {
+						SRP_LOG_ERR("srpo_uci_section_delete error (%d): %s", error, srpo_uci_error_description_get(error));
+						goto error_out;
+					}
+				}
+			} else if (node->schema->nodetype == LYS_LEAF) {
+				if (operation == SR_OP_CREATED || operation == SR_OP_MODIFIED) {
+					if (has_transform_sysrepo_data_private && strstr(node_xpath, "stop")) {
+						transform_cb_data = (void *) &(leasetime_data_t){.uci_section_name = uci_section_name, .sr_session = session};
+					} else if (has_transform_sysrepo_data_private) {
+						transform_cb_data = uci_section_name;
+					} else {
+						transform_cb_data = NULL;
+					}
+
+					error = srpo_uci_option_set(uci_path, node_value, transform_sysrepo_data_cb, transform_cb_data);
+					if (error) {
+						SRP_LOG_ERR("srpo_uci_option_set error (%d): %s", error, srpo_uci_error_description_get(error));
+						goto error_out;
+					}
+				} else if (operation == SR_OP_DELETED) {
+					error = srpo_uci_option_remove(uci_path);
+					if (error) {
+						SRP_LOG_ERR("srpo_uci_option_remove error (%d): %s", error, srpo_uci_error_description_get(error));
+						goto error_out;
+					}
+				}
+			} else if (node->schema->nodetype == LYS_LEAFLIST) {
+				if (has_transform_sysrepo_data_private) {
+					transform_cb_data = uci_section_name;
+				} else {
+					transform_cb_data = NULL;
+				}
+
+				if (operation == SR_OP_CREATED) {
+					error = srpo_uci_list_set(uci_path, node_value, transform_sysrepo_data_cb, transform_cb_data);
+					if (error) {
+						SRP_LOG_ERR("srpo_uci_list_set error (%d): %s", error, srpo_uci_error_description_get(error));
+						goto error_out;
+					}
+				} else if (operation == SR_OP_DELETED) {
+					error = srpo_uci_list_remove(uci_path, node_value);
+					if (error) {
+						SRP_LOG_ERR("srpo_uci_list_remove error (%d): %s", error, srpo_uci_error_description_get(error));
+						goto error_out;
+					}
+				}
+			}
+			FREE_SAFE(uci_section_name);
+			FREE_SAFE(uci_path);
+			FREE_SAFE(node_xpath);
+			node_value = NULL;
+		}
+
+		srpo_uci_commit("sip");
+	}
+
+	goto out;
+
+error_out:
+	srpo_uci_revert("sip");
+
+out:
+	FREE_SAFE(uci_section_name);
+	FREE_SAFE(node_xpath);
+	FREE_SAFE(uci_path);
+	sr_free_change_iter(sip_server_change_iter);
+
+	return error ? SR_ERR_CALLBACK_FAILED : SR_ERR_OK;
 }
 
-void sr_plugin_cleanup_cb(sr_session_ctx_t *session, void *private_ctx) {
-  INF("Plugin cleanup called, private_ctx is %s available.",
-      private_ctx ? "" : "not");
-  if (!private_ctx)
-    return;
+static char *sip_xpath_get(const struct lyd_node *node)
+{
+	char *xpath_node = NULL;
+	char *xpath_leaflist_open_bracket = NULL;
+	size_t xpath_trimed_size = 0;
+	char *xpath_trimed = NULL;
 
-  ctx_t *ctx = private_ctx;
-  if (NULL == ctx) {
-    return;
-  }
-  /* clean startup datastore */
-  if (NULL != ctx->startup_sess) {
-    sr_session_stop(ctx->startup_sess);
-  }
-  if (NULL != ctx->startup_conn) {
-    sr_disconnect(ctx->startup_conn);
-  }
-  if (NULL != ctx->sub) {
-    sr_unsubscribe(ctx->sub);
-  }
-  if (ctx->uctx) {
-    uci_free_context(ctx->uctx);
-  }
-  free(ctx);
+	if (node->schema->nodetype == LYS_LEAFLIST) {
+		xpath_node = lyd_path(node);
+		xpath_leaflist_open_bracket = strrchr(xpath_node, '[');
+		if (xpath_leaflist_open_bracket == NULL) {
+			return xpath_node;
+		}
 
-  DBG_MSG("Plugin cleaned-up successfully");
+		xpath_trimed_size = (size_t) xpath_leaflist_open_bracket - (size_t) xpath_node + 1;
+		xpath_trimed = xcalloc(1, xpath_trimed_size);
+		strncpy(xpath_trimed, xpath_node, xpath_trimed_size - 1);
+		xpath_trimed[xpath_trimed_size - 1] = '\0';
+
+		FREE_SAFE(xpath_node);
+
+		return xpath_trimed;
+	} else {
+		return lyd_path(node);
+	}
 }
+
+static int sip_state_data_cb(sr_session_ctx_t *session, const char *module_name, const char *path, const char *request_xpath, uint32_t request_id, struct lyd_node **parent, void *private_data)
+{
+	srpo_ubus_result_values_t *values = NULL;
+	srpo_ubus_call_data_t ubus_call_data = {.lookup_path = NULL, .method = NULL, .transform_data_cb = NULL};
+	int error = SRPO_UBUS_ERR_OK;
+
+// TODO
+
+out:
+	if (values) {
+		srpo_ubus_free_result_values(values);
+	}
+
+	return error ? SR_ERR_CALLBACK_FAILED : SR_ERR_OK;
+}
+
+
 
 #ifndef PLUGIN
 #include <signal.h>
@@ -271,45 +370,54 @@ void sr_plugin_cleanup_cb(sr_session_ctx_t *session, void *private_ctx) {
 
 volatile int exit_application = 0;
 
-static void sigint_handler(__attribute__((unused)) int signum) {
-  INF_MSG("Sigint called, exiting...");
-  exit_application = 1;
+static void sigint_handler(__attribute__((unused)) int signum);
+
+int main()
+{
+	int error = SR_ERR_OK;
+	sr_conn_ctx_t *connection = NULL;
+	sr_session_ctx_t *session = NULL;
+	void *private_data = NULL;
+
+	sr_log_stderr(SR_LL_DBG);
+
+	/* connect to sysrepo */
+	error = sr_connect(SR_CONN_DEFAULT, &connection);
+	if (error) {
+		SRP_LOG_ERR("sr_connect error (%d): %s", error, sr_strerror(error));
+		goto out;
+	}
+
+	error = sr_session_start(connection, SR_DS_RUNNING, &session);
+	if (error) {
+		SRP_LOG_ERR("sr_session_start error (%d): %s", error, sr_strerror(error));
+		goto out;
+	}
+
+	error = sip_plugin_init_cb(session, &private_data);
+	if (error) {
+		SRP_LOG_ERRMSG("sip_plugin_init_cb error");
+		goto out;
+	}
+
+	/* loop until ctrl-c is pressed / SIGINT is received */
+	signal(SIGINT, sigint_handler);
+	signal(SIGPIPE, SIG_IGN);
+	while (!exit_application) {
+		sleep(1); /* or do some more useful work... */
+	}
+
+out:
+	sip_plugin_cleanup_cb(session, private_data);
+	sr_disconnect(connection);
+
+	return error ? -1 : 0;
 }
 
-int main() {
-  INF_MSG("Plugin application mode initialized");
-  sr_conn_ctx_t *connection = NULL;
-  sr_session_ctx_t *session = NULL;
-  void *private_ctx = NULL;
-  int rc = SR_ERR_OK;
-
-  ENABLE_LOGGING(SR_LL_DBG);
-
-  /* connect to sysrepo */
-  rc = sr_connect(SR_CONN_DEFAULT, &connection);
-  CHECK_RET(rc, cleanup, "Error by sr_connect: %s", sr_strerror(rc));
-
-  /* start session */
-  rc = sr_session_start(connection, SR_DS_RUNNING, &session);
-  CHECK_RET(rc, cleanup, "Error by sr_session_start: %s", sr_strerror(rc));
-
-  rc = sr_plugin_init_cb(session, &private_ctx);
-  CHECK_RET(rc, cleanup, "Error by sr_plugin_init_cb: %s", sr_strerror(rc));
-
-  /* loop until ctrl-c is pressed / SIGINT is received */
-  signal(SIGINT, sigint_handler);
-  signal(SIGPIPE, SIG_IGN);
-  while (!exit_application) {
-    sleep(1); /* or do some more useful work... */
-  }
-
-cleanup:
-  sr_plugin_cleanup_cb(session, private_ctx);
-  if (NULL != session) {
-    sr_session_stop(session);
-  }
-  if (NULL != connection) {
-    sr_disconnect(connection);
-  }
+static void sigint_handler(__attribute__((unused)) int signum)
+{
+	SRP_LOG_INFMSG("Sigint called, exiting...");
+	exit_application = 1;
 }
+
 #endif
