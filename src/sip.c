@@ -19,10 +19,17 @@
 
 #define SIP_YANG_MODEL "terastream-sip"
 #define SYSREPOCFG_EMPTY_CHECK_COMMAND "sysrepocfg -X -d running -m " SIP_YANG_MODEL
+#define SIP_ACCOUNT_XPATH_TEMPLATE "/" SIP_YANG_MODEL ":sip/sip-account[account='%s']"
+#define SIP_ADVANCED_XPATH_TEMPLATE "/" SIP_YANG_MODEL ":sip/advanced"
+#define SIP_DIGITMAP_XPATH_TEMPLATE "/" SIP_YANG_MODEL ":sip/digitmap"
+#define SIP_STATE_DATA_XPATH_TEMPLATE "/" SIP_YANG_MODEL ":sip-state"
+
+typedef char *(*transform_data_cb)(const char *);
 
 typedef struct {
 	const char *value_name;
 	const char *xpath_template;
+	transform_data_cb transform_data;
 } sip_ubus_json_transform_table_t;
 
 int sip_plugin_init_cb(sr_session_ctx_t *session, void **private_data);
@@ -37,6 +44,49 @@ static char *sip_xpath_get(const struct lyd_node *node);
 
 static void sip_ubus(const char *ubus_json, srpo_ubus_result_values_t *values);
 static int store_ubus_values_to_datastore(sr_session_ctx_t *session, const char *request_xpath, srpo_ubus_result_values_t *values, struct lyd_node **parent);
+
+srpo_uci_xpath_uci_template_map_t sip_xpath_uci_path_template_map[] = {
+	{SIP_ACCOUNT_XPATH_TEMPLATE "voice_client.%s", "interface", NULL, NULL, false, false},
+	{SIP_ACCOUNT_XPATH_TEMPLATE "/account_name", "voice_client.%s.name", NULL, NULL, NULL, false, false},
+	{SIP_ACCOUNT_XPATH_TEMPLATE "/display_name", "voice_client.%s.displayname", NULL, NULL, NULL, false, false},
+	{SIP_ACCOUNT_XPATH_TEMPLATE "/enabled", "voice_client.%s.enabled", NULL, NULL, NULL, false, false},
+	{SIP_ACCOUNT_XPATH_TEMPLATE "/domain", "voice_client.%s.domain", NULL, NULL, NULL, false, false},
+	{SIP_ACCOUNT_XPATH_TEMPLATE "/username", "voice_client.%s.user", NULL, NULL, NULL, false, false},
+	{SIP_ACCOUNT_XPATH_TEMPLATE "/password", "voice_client.%s.secret", NULL, NULL, NULL, false, false},
+	{SIP_ACCOUNT_XPATH_TEMPLATE "/authentication_name", "voice_client.%s.authuser", NULL, NULL, NULL, false, false},
+	{SIP_ACCOUNT_XPATH_TEMPLATE "/host", "voice_client.%s.host", NULL, NULL, NULL, false, false},
+	{SIP_ACCOUNT_XPATH_TEMPLATE "/port", "voice_client.%s.port", NULL, NULL, NULL, false, false},
+	{SIP_ACCOUNT_XPATH_TEMPLATE "/outbound/proxy", "voice_client.%s.outboundproxy", NULL, NULL, NULL, false, false},
+	{SIP_ACCOUNT_XPATH_TEMPLATE "/outbound/port", "voice_client.%s.outboundproxyport", NULL, NULL, NULL, false, false},
+	{SIP_ADVANCED_XPATH_TEMPLATE "/rtpstart", "voice_client.SIP.rtpstart", NULL, NULL, NULL, false, false},
+	{SIP_ADVANCED_XPATH_TEMPLATE "/rtpend", "voice_client.SIP.rtpend", NULL, NULL, NULL, false, false},
+	{SIP_ADVANCED_XPATH_TEMPLATE "/dtmfmode", "voice_client.SIP.dtmfmode", NULL, NULL, NULL, false, false},
+	{SIP_DIGITMAP_XPATH_TEMPLATE "/dials", "voice_client.direct_dial.direct_dial", NULL, NULL, NULL, false, false},
+	{SIP_DIGITMAP_XPATH_TEMPLATE "/enabled", "voice_client.direct_dial.XXXX", NULL, NULL, NULL, false, false},
+};
+
+
+static sip_ubus_json_transform_table_t sip_transform_table[] = {
+	{.value_name = "account", .xpath_template = SIP_STATE_DATA_XPATH_TEMPLATE "/account"},
+	{.value_name = "registered", .xpath_template = SIP_STATE_DATA_XPATH_TEMPLATE "/registered"},
+	{.value_name = "state", .xpath_template = SIP_STATE_DATA_XPATH_TEMPLATE "/state"},
+	{.value_name = "username", .xpath_template = SIP_STATE_DATA_XPATH_TEMPLATE "/username"},
+	{.value_name = "refresh", .xpath_template = SIP_STATE_DATA_XPATH_TEMPLATE "/refresh"},
+};
+
+
+static const char *sip_uci_sections[] = {"brcm_line", "dialplan", "sip_advanced", "brcm_advanced", "features", "log", "call_filter", "cdr_log", "sip_service_provider"};
+
+static struct {
+	const char *uci_file;
+	const char **uci_section_list;
+	size_t uci_section_list_size;
+	bool convert_unnamed_sections;
+} sip_config_files[] = {
+	{"voice_client", sip_uci_sections, ARRAY_SIZE(sip_uci_sections), true},
+};
+
+
 
 
 
@@ -135,6 +185,102 @@ out:
 	return is_empty;
 }
 
+static int sip_uci_data_load(sr_session_ctx_t *session)
+{
+	int error = 0;
+	char **uci_path_list = NULL;
+	size_t uci_path_list_size = 0;
+	char *xpath = NULL;
+	srpo_uci_transform_data_cb transform_uci_data_cb = NULL;
+	bool has_transform_uci_data_private = false;
+	char *uci_section_name = NULL;
+	char **uci_value_list = NULL;
+	size_t uci_value_list_size = 0;
+
+	for (size_t i = 0; i < ARRAY_SIZE(sip_config_files); i++) {
+		error = srpo_uci_ucipath_list_get(sip_config_files[i].uci_file, sip_config_files[i].uci_section_list, sip_config_files[i].uci_section_list_size, &uci_path_list, &uci_path_list_size, true);
+		if (error) {
+			SRP_LOG_ERR("srpo_uci_path_list_get error (%d): %s", error, srpo_uci_error_description_get(error));
+			goto error_out;
+		}
+
+		for (size_t j = 0; j < uci_path_list_size; j++) {
+			error = srpo_uci_ucipath_to_xpath_convert(uci_path_list[j], sip_xpath_uci_path_template_map, ARRAY_SIZE(sip_xpath_uci_path_template_map), &xpath);
+			if (error && error != SRPO_UCI_ERR_NOT_FOUND) {
+				SRP_LOG_ERR("srpo_uci_to_xpath_path_convert error (%d): %s", error, srpo_uci_error_description_get(error));
+				goto error_out;
+			} else if (error == SRPO_UCI_ERR_NOT_FOUND) {
+				error = 0;
+				FREE_SAFE(uci_path_list[j]);
+				continue;
+			}
+
+			error = srpo_uci_transform_uci_data_cb_get(uci_path_list[j], sip_xpath_uci_path_template_map, ARRAY_SIZE(sip_xpath_uci_path_template_map), &transform_uci_data_cb);
+			if (error) {
+				SRP_LOG_ERR("srpo_uci_transfor_uci_data_cb_get error (%d): %s", error, srpo_uci_error_description_get(error));
+				goto error_out;
+			}
+
+			error = srpo_uci_has_transform_uci_data_private_get(uci_path_list[j], sip_xpath_uci_path_template_map, ARRAY_SIZE(sip_xpath_uci_path_template_map), &has_transform_uci_data_private);
+			if (error) {
+				SRP_LOG_ERR("srpo_uci_has_transform_uci_data_private_get error (%d): %s", error, srpo_uci_error_description_get(error));
+				goto error_out;
+			}
+
+			uci_section_name = srpo_uci_section_name_get(uci_path_list[j]);
+
+			error = srpo_uci_element_value_get(uci_path_list[j], transform_uci_data_cb, has_transform_uci_data_private ? uci_section_name : NULL, &uci_value_list, &uci_value_list_size);
+			if (error) {
+				SRP_LOG_ERR("srpo_uci_element_value_get error (%d): %s", error, srpo_uci_error_description_get(error));
+				goto error_out;
+			}
+
+			for (size_t k = 0; k < uci_value_list_size; k++) {
+				error = sr_set_item_str(session, xpath, uci_value_list[k], NULL, SR_EDIT_DEFAULT);
+				if (error) {
+					SRP_LOG_ERR("sr_set_item_str error (%d): %s", error, sr_strerror(error));
+					goto error_out;
+				}
+
+				FREE_SAFE(uci_value_list[k]);
+			}
+
+			FREE_SAFE(uci_section_name);
+			FREE_SAFE(uci_path_list[j]);
+			FREE_SAFE(xpath);
+			FREE_SAFE(uci_value_list);
+		}
+
+		FREE_SAFE(uci_path_list);
+	}
+
+	error = sr_apply_changes(session, 0, 0);
+	if (error) {
+		SRP_LOG_ERR("sr_apply_changes error (%d): %s", error, sr_strerror(error));
+		goto error_out;
+	}
+
+	goto out;
+
+error_out:
+	FREE_SAFE(xpath);
+	FREE_SAFE(uci_section_name);
+
+	for (size_t i = 0; i < uci_path_list_size; i++) {
+		FREE_SAFE(uci_path_list[i]);
+	}
+
+	FREE_SAFE(uci_path_list);
+
+	for (size_t i = 0; i < uci_value_list_size; i++) {
+		FREE_SAFE(uci_value_list[i]);
+	}
+
+	FREE_SAFE(uci_value_list);
+
+out:
+	return error ? -1 : 0;
+}
 
 void sip_plugin_cleanup_cb(sr_session_ctx_t *session, void *private_data)
 {
@@ -302,13 +448,13 @@ static int sip_module_change_cb(sr_session_ctx_t *session, const char *module_na
 			node_value = NULL;
 		}
 
-		srpo_uci_commit("sip");
+		srpo_uci_commit("voice_client");
 	}
 
 	goto out;
 
 error_out:
-	srpo_uci_revert("sip");
+	srpo_uci_revert("voice_client");
 
 out:
 	FREE_SAFE(uci_section_name);
@@ -349,10 +495,23 @@ static char *sip_xpath_get(const struct lyd_node *node)
 static int sip_state_data_cb(sr_session_ctx_t *session, const char *module_name, const char *path, const char *request_xpath, uint32_t request_id, struct lyd_node **parent, void *private_data)
 {
 	srpo_ubus_result_values_t *values = NULL;
-	srpo_ubus_call_data_t ubus_call_data = {.lookup_path = NULL, .method = NULL, .transform_data_cb = NULL};
+	srpo_ubus_call_data_t ubus_call_data = {.lookup_path = "asterisk.sip", .method = "registry_status", .transform_data_cb = sip_ubus, .timeout = 0, .json_call_arguments = NULL};
 	int error = SRPO_UBUS_ERR_OK;
 
-// TODO
+	error = srpo_ubus_call(values, &ubus_call_data);
+	if (error != SRPO_UBUS_ERR_OK) {
+		SRP_LOG_ERR("srpo_ubus_call error (%d): %s", error, srpo_ubus_error_description_get(error));
+		goto out;
+	}
+
+	error = store_ubus_values_to_datastore(session, request_xpath, values, parent);
+		if (error != SRPO_UBUS_ERR_OK) {
+		SRP_LOG_ERR("store_ubus_values_to_datastore error (%d)", error);
+		goto out;
+	}
+
+	srpo_ubus_free_result_values(values);
+	values = NULL;
 
 out:
 	if (values) {
@@ -362,7 +521,54 @@ out:
 	return error ? SR_ERR_CALLBACK_FAILED : SR_ERR_OK;
 }
 
+static void sip_ubus(const char *ubus_json, srpo_ubus_result_values_t *values)
+{
+	json_object *result = NULL;
+	json_object *child_value = NULL;
+	const char *value_string = NULL;
+	srpo_ubus_error_e error = SRPO_UBUS_ERR_OK;
 
+	result = json_tokener_parse(ubus_json);
+
+	json_object_object_foreach(result, key, value)
+	{
+		for (size_t i = 0; i < ARRAY_SIZE(sip_transform_table); i++) {
+			json_object_object_get_ex(value, sip_transform_table[i].value_name, &child_value);
+			if (child_value == NULL) {
+				goto cleanup;
+			}
+
+			value_string = json_object_get_string(child_value);
+
+			error = srpo_ubus_result_values_add(values, value_string, strlen(value_string),sip_transform_table[i].xpath_template,strlen(sip_transform_table[i].xpath_template),key, strlen(key));
+			if (error != SRPO_UBUS_ERR_OK) {
+				goto cleanup;
+			}
+		}
+	}
+
+cleanup:
+	json_object_put(result);
+	return ;
+}
+
+static int store_ubus_values_to_datastore(sr_session_ctx_t *session, const char *request_xpath, srpo_ubus_result_values_t *values, struct lyd_node **parent)
+{
+	const struct ly_ctx *ly_ctx = NULL;
+	if (*parent == NULL) {
+		ly_ctx = sr_get_context(sr_session_get_connection(session));
+		if (ly_ctx == NULL) {
+			return -1;
+		}
+		*parent = lyd_new_path(NULL, ly_ctx, request_xpath, NULL, 0, 0);
+	}
+
+	for (size_t i = 0; i < values->num_values; i++) {
+		lyd_new_path(*parent, NULL, values->values[i].xpath, values->values[i].value, 0, 0);
+	}
+
+	return 0;
+}
 
 #ifndef PLUGIN
 #include <signal.h>
