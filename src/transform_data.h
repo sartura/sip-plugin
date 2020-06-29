@@ -29,10 +29,11 @@ typedef struct {
 	sr_session_ctx_t *sr_session;
 } leasetime_data_t;
 
-char *transform_data_boolean_to_zero_one_transform(const char *value, void *private_data);
-char *transform_data_zero_one_to_boolean_transform(const char *value, void *private_data);
-char *transform_data_boolean_to_zero_one_negated_transform(const char *value, void *private_data);
-char *transform_data_zero_one_to_boolean_negated_transform(const char *value, void *private_data);
+char *transform_data_sysrepo_option_callback(const char *value, void *private_data);
+char *transform_data_sysrepo_boolean_callback(const char *value, void *private_data);
+char *transform_data_sysrepo_section_callback(const char *value, void *private_data);
+char *transform_data_sysrepo_list_callback(const char *value, void *private_data);
+char *transform_data_sysrepo_list_callback_enable(const char *value, void *private_data);
 
 
 #endif /*  TRANSFORM_DATA_H_ONCE */
