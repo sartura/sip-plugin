@@ -1,5 +1,5 @@
 CMAKE_MINIMUM_REQUIRED(VERSION 2.8)
-PROJECT(sip C)
+PROJECT(sysrepo-plugin-dt-sip C)
 
 include(CompileOptions.cmake)
 
