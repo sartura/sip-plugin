@@ -46,25 +46,26 @@ static void sip_ubus(const char *ubus_json, srpo_ubus_result_values_t *values);
 static int store_ubus_values_to_datastore(sr_session_ctx_t *session, const char *request_xpath, srpo_ubus_result_values_t *values, struct lyd_node **parent);
 
 srpo_uci_xpath_uci_template_map_t sip_xpath_uci_path_template_map[] = {
-	{SIP_ACCOUNT_XPATH_TEMPLATE, "voice_client.%s", NULL, transform_data_sysrepo_section_callback, NULL, true, true},
-	{SIP_ACCOUNT_XPATH_TEMPLATE "/account_name", "voice_client.%s.name", NULL, transform_data_sysrepo_option_callback, NULL, true, true},
-	{SIP_ACCOUNT_XPATH_TEMPLATE "/display_name", "voice_client.%s.displayname", NULL, transform_data_sysrepo_option_callback, NULL, true, true},
-	{SIP_ACCOUNT_XPATH_TEMPLATE "/enabled", "voice_client.%s.enabled", NULL, transform_data_sysrepo_boolean_callback, NULL, true, true},
-	{SIP_ACCOUNT_XPATH_TEMPLATE "/domain", "voice_client.%s.domain", NULL, transform_data_sysrepo_option_callback, NULL, true, true},
-	{SIP_ACCOUNT_XPATH_TEMPLATE "/username", "voice_client.%s.user", NULL, transform_data_sysrepo_option_callback, NULL, true, true},
-	{SIP_ACCOUNT_XPATH_TEMPLATE "/password", "voice_client.%s.secret", NULL, transform_data_sysrepo_option_callback, NULL, true, true},
-	{SIP_ACCOUNT_XPATH_TEMPLATE "/authentication_name", "voice_client.%s.authuser", NULL, transform_data_sysrepo_option_callback, NULL, true, true},
-	{SIP_ACCOUNT_XPATH_TEMPLATE "/host", "voice_client.%s.host", NULL, transform_data_sysrepo_option_callback, NULL, true, true},
-	{SIP_ACCOUNT_XPATH_TEMPLATE "/port", "voice_client.%s.port", NULL, transform_data_sysrepo_option_callback, NULL, true, true},
-	{SIP_ACCOUNT_XPATH_TEMPLATE "/outbound/proxy", "voice_client.%s.outboundproxy", NULL, transform_data_sysrepo_option_callback, NULL, true, true},
-	{SIP_ACCOUNT_XPATH_TEMPLATE "/outbound/port", "voice_client.%s.outboundproxyport", NULL, transform_data_sysrepo_option_callback, NULL, true, true},
-	{SIP_ADVANCED_XPATH_TEMPLATE "/rtpstart", "voice_client.SIP.rtpstart", NULL, transform_data_sysrepo_option_callback, NULL, true, true},
-	{SIP_ADVANCED_XPATH_TEMPLATE "/rtpend", "voice_client.SIP.rtpend", NULL, transform_data_sysrepo_option_callback, NULL, true, true},
-	{SIP_ADVANCED_XPATH_TEMPLATE "/dtmfmode", "voice_client.SIP.dtmfmode", NULL, transform_data_sysrepo_option_callback, NULL, true, true},
-	{SIP_DIGITMAP_XPATH_TEMPLATE "/dials", "voice_client.direct_dial.direct_dial", NULL, transform_data_sysrepo_list_callback, NULL, true, true},
-	{SIP_DIGITMAP_XPATH_TEMPLATE "/enabled", "voice_client.direct_dial.XXXX", NULL, transform_data_sysrepo_list_callback_enable, NULL, true, true},
-};
+	{SIP_ACCOUNT_XPATH_TEMPLATE, "voice_client.%s", NULL, NULL, transform_data_sysrepo_section_callback, NULL, true, true},
+	{SIP_ACCOUNT_XPATH_TEMPLATE "/account_name", "voice_client.%s.name", NULL, NULL, transform_data_sysrepo_option_callback, NULL, true, true},
+	{SIP_ACCOUNT_XPATH_TEMPLATE "/display_name", "voice_client.%s.displayname", NULL, NULL, transform_data_sysrepo_option_callback, NULL, true, true},
+	{SIP_ACCOUNT_XPATH_TEMPLATE "/enabled", "voice_client.%s.enabled", NULL, NULL, transform_data_sysrepo_boolean_callback, NULL, true, true},
+	{SIP_ACCOUNT_XPATH_TEMPLATE "/domain", "voice_client.%s.domain", NULL, NULL, transform_data_sysrepo_option_callback, NULL, true, true},
+	{SIP_ACCOUNT_XPATH_TEMPLATE "/username", "voice_client.%s.user", NULL, NULL, transform_data_sysrepo_option_callback, NULL, true, true},
+	{SIP_ACCOUNT_XPATH_TEMPLATE "/password", "voice_client.%s.secret", NULL, NULL, transform_data_sysrepo_option_callback, NULL, true, true},
+	{SIP_ACCOUNT_XPATH_TEMPLATE "/authentication_name", "voice_client.%s.authuser", NULL, NULL, transform_data_sysrepo_option_callback, NULL, true, true},
+	{SIP_ACCOUNT_XPATH_TEMPLATE "/host", "voice_client.%s.host", NULL, NULL, transform_data_sysrepo_option_callback, NULL, true, true},
+	{SIP_ACCOUNT_XPATH_TEMPLATE "/port", "voice_client.%s.port", NULL, NULL, transform_data_sysrepo_option_callback, NULL, true, true},
+	{SIP_ACCOUNT_XPATH_TEMPLATE "/outbound/proxy", "voice_client.%s.outboundproxy", NULL, NULL, transform_data_sysrepo_option_callback, NULL, true, true},
+	{SIP_ACCOUNT_XPATH_TEMPLATE "/outbound/port", "voice_client.%s.outboundproxyport", NULL, NULL, transform_data_sysrepo_option_callback, NULL, true, true},
 
+	{SIP_ADVANCED_XPATH_TEMPLATE "/rtpstart", "voice_client.SIP.rtpstart", NULL, NULL, transform_data_sysrepo_option_callback, NULL, true, true},
+	{SIP_ADVANCED_XPATH_TEMPLATE "/rtpend", "voice_client.SIP.rtpend", NULL, NULL, transform_data_sysrepo_option_callback, NULL, true, true},
+	{SIP_ADVANCED_XPATH_TEMPLATE "/dtmfmode", "voice_client.SIP.dtmfmode", NULL, NULL, transform_data_sysrepo_option_callback, NULL, true, true},
+
+	{SIP_DIGITMAP_XPATH_TEMPLATE "/dials", "voice_client.direct_dial.direct_dial", NULL, NULL, transform_data_sysrepo_list_callback, NULL, true, true},
+	{SIP_DIGITMAP_XPATH_TEMPLATE "/enabled", "voice_client.direct_dial.XXXX", NULL, NULL, transform_data_sysrepo_list_callback_enable, NULL, true, true},
+};
 
 static sip_ubus_json_transform_table_t sip_transform_table[] = {
 	{.value_name = "account", .xpath_template = SIP_STATE_DATA_XPATH_TEMPLATE "/account"},
@@ -73,7 +74,6 @@ static sip_ubus_json_transform_table_t sip_transform_table[] = {
 	{.value_name = "username", .xpath_template = SIP_STATE_DATA_XPATH_TEMPLATE "/username"},
 	{.value_name = "refresh", .xpath_template = SIP_STATE_DATA_XPATH_TEMPLATE "/refresh"},
 };
-
 
 static const char *sip_uci_sections[] = {"brcm_line", "dialplan", "sip_advanced", "brcm_advanced", "features", "log", "call_filter", "cdr_log", "sip_service_provider"};
 
@@ -135,14 +135,13 @@ int sip_plugin_init_cb(sr_session_ctx_t *session, void **private_data)
 		goto error_out;
 	}
 
-  SRP_LOG_INFMSG("subscribing to get oper items");
+	SRP_LOG_INFMSG("subscribing to get oper items");
 
 	error = sr_oper_get_items_subscribe(session, SIP_YANG_MODEL, SIP_STATE_DATA_XPATH_TEMPLATE, sip_state_data_cb, NULL, SR_SUBSCR_CTX_REUSE, &subscription);
 	if (error) {
 		SRP_LOG_ERR("sr_oper_get_items_subscribe error (%d): %s", error, sr_strerror(error));
 		goto error_out;
 	}
-
 
 	SRP_LOG_INFMSG("plugin init done");
 
@@ -289,7 +288,6 @@ void sip_plugin_cleanup_cb(sr_session_ctx_t *session, void *private_data)
 
 	SRP_LOG_INFMSG("plugin cleanup finished");
 }
-
 
 static int sip_module_change_cb(sr_session_ctx_t *session, const char *module_name, const char *xpath, sr_event_t event, uint32_t request_id, void *private_data)
 {
@@ -500,7 +498,7 @@ static int sip_state_data_cb(sr_session_ctx_t *session, const char *module_name,
 	}
 
 	error = store_ubus_values_to_datastore(session, request_xpath, values, parent);
-		if (error != SRPO_UBUS_ERR_OK) {
+	if (error != SRPO_UBUS_ERR_OK) {
 		SRP_LOG_ERR("store_ubus_values_to_datastore error (%d)", error);
 		goto out;
 	}
@@ -535,7 +533,7 @@ static void sip_ubus(const char *ubus_json, srpo_ubus_result_values_t *values)
 
 			value_string = json_object_get_string(child_value);
 
-			error = srpo_ubus_result_values_add(values, value_string, strlen(value_string),sip_transform_table[i].xpath_template,strlen(sip_transform_table[i].xpath_template),key, strlen(key));
+			error = srpo_ubus_result_values_add(values, value_string, strlen(value_string), sip_transform_table[i].xpath_template, strlen(sip_transform_table[i].xpath_template), key, strlen(key));
 			if (error != SRPO_UBUS_ERR_OK) {
 				goto cleanup;
 			}
@@ -544,7 +542,7 @@ static void sip_ubus(const char *ubus_json, srpo_ubus_result_values_t *values)
 
 cleanup:
 	json_object_put(result);
-	return ;
+	return;
 }
 
 static int store_ubus_values_to_datastore(sr_session_ctx_t *session, const char *request_xpath, srpo_ubus_result_values_t *values, struct lyd_node **parent)
