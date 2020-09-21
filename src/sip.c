@@ -32,9 +32,6 @@ typedef struct {
 	transform_data_cb transform_data;
 } sip_ubus_json_transform_table_t;
 
-int sip_plugin_init_cb(sr_session_ctx_t *session, void **private_data);
-void sip_plugin_cleanup_cb(sr_session_ctx_t *session, void *private_data);
-
 static int sip_module_change_cb(sr_session_ctx_t *session, const char *module_name, const char *xpath, sr_event_t event, uint32_t request_id, void *private_data);
 static int sip_state_data_cb(sr_session_ctx_t *session, const char *module_name, const char *path, const char *request_xpath, uint32_t request_id, struct lyd_node **parent, void *private_data);
 
@@ -85,7 +82,7 @@ static struct {
 	{"voice_client", sip_uci_sections, ARRAY_SIZE(sip_uci_sections)},
 };
 
-int sip_plugin_init_cb(sr_session_ctx_t *session, void **private_data)
+int sr_plugin_init_cb(sr_session_ctx_t *session, void **private_data)
 {
 	int error = 0;
 	sr_conn_ctx_t *connection = NULL;
@@ -276,7 +273,7 @@ out:
 	return error ? -1 : 0;
 }
 
-void sip_plugin_cleanup_cb(sr_session_ctx_t *session, void *private_data)
+void sr_plugin_cleanup_cb(sr_session_ctx_t *session, void *private_data)
 {
 	srpo_uci_cleanup();
 
@@ -593,9 +590,9 @@ int main()
 		goto out;
 	}
 
-	error = sip_plugin_init_cb(session, &private_data);
+	error = sr_plugin_init_cb(session, &private_data);
 	if (error) {
-		SRP_LOG_ERRMSG("sip_plugin_init_cb error");
+		SRP_LOG_ERRMSG("sr_plugin_init_cb error");
 		goto out;
 	}
 
@@ -607,7 +604,7 @@ int main()
 	}
 
 out:
-	sip_plugin_cleanup_cb(session, private_data);
+	sr_plugin_cleanup_cb(session, private_data);
 	sr_disconnect(connection);
 
 	return error ? -1 : 0;
